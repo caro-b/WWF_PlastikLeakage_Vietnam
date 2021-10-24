@@ -60,13 +60,13 @@ prcp_noaa$ELEVATION <- NULL
 names(prcp_noaa) <- tolower(names(prcp_noaa))
 
 ## remove NA values (where no precipitation value recorded)
-prcp_noaa <- prcp_noaa[!is.na(prcp_noaa$PRCP),]
+prcp_noaa <- prcp_noaa[!is.na(prcp_noaa$prcp),]
   
 ## check length of station names
-unique(prcp_noaa$STATION) # 5 digits
+unique(prcp_noaa$station) # 5 digits
 
 ## extract station name
-prcp_noaa$STATION <- substr(prcp_noaa$STATION, nchar(prcp_noaa$STATION)-4, nchar(prcp_noaa$STATION))
+prcp_noaa$station <- substr(prcp_noaa$station, nchar(prcp_noaa$station)-4, nchar(prcp_noaa$station))
 
 
 ## b) Meteostat
