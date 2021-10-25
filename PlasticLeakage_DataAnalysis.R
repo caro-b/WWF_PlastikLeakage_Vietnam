@@ -91,11 +91,8 @@ typeof(prcp_noaa$station) # character
 typeof(prcp_meteostat$station) # double
 prcp_meteostat$station <- as.character(prcp_meteostat$station)
 
-## subset of data for merging (remote columns missing in meteostat data)
-prcp_noaa_subset <- prcp_noaa %>% select(station, date, prcp)
-
 ## merge data by station id
-prcp_merge <- rbind(prcp_noaa_subset, prcp_meteostat)
+prcp_merge <- rbind(prcp_noaa %>% select(station, date, prcp), prcp_meteostat %>% select(station, date, prcp))
 
 ## remove exact duplicates
 prcp_merge <- distinct(prcp_merge)
@@ -104,10 +101,13 @@ prcp_merge <- distinct(prcp_merge)
 sum(duplicated(prcp_merge[,1:2])) #4443
 
 ## for multiple prcp values at same station & date - take average
-prcp_merge <- prcp_merge %>% group_by(station, date) %>% summarize(value=mean(prcp))
+prcp_merge <- prcp_merge %>% group_by(station, date) %>% summarize(prcp_mean=mean(prcp))
+
+## station location data - from meteostat data (as noaa is only one of its sources)
+station_data <- unique(prcp_meteostat[,c(1,4:6)])
 
 ## join extra station information to prcp data
-prcp_data <- left_join(prcp_merge, unique(prcp_noaa[,1:4]), by ="station")
+prcp_data <- left_join(prcp_merge, station_data, by ="station")
 
 
 ## No. of prcp stations
