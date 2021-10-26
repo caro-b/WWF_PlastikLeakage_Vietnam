@@ -1,10 +1,9 @@
-#################### Data Import ####################
+#################### Data Preparation ####################
 ## 
 ## Author: Caroline Busse
 ## December 2021
 ## Email: caroline.busse@stud-mail.uni-wuerzburg.de
 ##
-#####################################################
 
 
 
@@ -141,6 +140,7 @@ typeof(station_data$station) # character
 # change to character data type
 heavywind_stations$station <- as.character(heavywind_stations$station)
 
+## join extra station information to wspd data
 wspd_data <- left_join(heavywind_stations, station_data, by ="station")
 
 
@@ -158,7 +158,7 @@ prcp_stations <- SpatialPointsDataFrame(coords = c(prcp_data[,c("longitude","lat
 plot(prcp_stations)
 
 ## export as shapefile
-shapefile(x = prcp_stations, file = paste(dir, "/precipitation_stations_VN.shp", sep = ""))
+shapefile(x = prcp_stations, filename = paste(dir, "/precipitation_stations_VN.shp", sep = ""), overwrite=T)
 
 
 #### 2. Wind (hourly)
@@ -169,7 +169,7 @@ wspd_stations <- SpatialPointsDataFrame(coords = c(wspd_data[,c("longitude","lat
                                         data = wspd_data)
 plot(wspd_stations)
 
-shapefile(x = wspd_stations, file = paste(dir, "/windspeed_stations_VN.shp", sep = ""))
+shapefile(x = wspd_stations, filename = paste(dir, "/windspeed_stations_VN.shp", sep = ""), overwrite=T)
 
 
 #### TODO: combine prcp & wspd into one shapefile?? ####
