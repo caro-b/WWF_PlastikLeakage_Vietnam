@@ -10,7 +10,7 @@
 #### I. SETUP ####
 
 # install required packages (if not installed yet)
-packagelist <- c("dplyr","raster","sp","tidyverse")
+packagelist <- c("dplyr","gdalUtils","raster","rgdal","sp","tidyverse")
 new.packages <- packagelist[!(packagelist %in% installed.packages()[,"Package"])]
 if(length(new.packages)) install.packages(new.packages)
 
@@ -61,18 +61,30 @@ jrc_water1 <- raster(paste(dir, "/JRC_GlobalSurfaceWater_Vietnam-0000000000-0000
 jrc_water2 <- raster(paste(dir, "/JRC_GlobalSurfaceWater_Vietnam-0000046592-0000000000.tif", sep = ""))
 
 # Mosaic/merge raster tiles into one image
-jrc_water <- mosaic(jrc_water1, jrc_water2, fun=mean)
+jrc_water <- merge(jrc_water1, jrc_water2, extent = extent(vietnam))
+
+plot(jrc_water)
+hist(jrc_water)
+writeRaster(jrc_water, file="jrc_water.tif", format="GTiff")
+
+
+#### TODO: first mask & then merge ####
+
 
 ## mask image to extent of Vietnam
 mask <- jrc_water
 mask[mask == 0] <- NA
-jrc_water <- mask(x = jrc_water, mask = mask)
+plot(mask)
+jrc_water_masked <- mask(x = jrc_water, mask = mask)
 
-plot(jrc_water1)
-plot(jrc_water2)
 
-plot(jrc_water, main = "JRC Global Surface Water")
+plot(jrc_water_masked, main = "JRC Global Surface Water")
 plot(vietnam, add=T)
+
+masked <- mask(x = jrc_water, mask = vietnam)
+plot(masked)
+cropped <- crop(x = masked, y = extent(vietnam))
+plot(cropped)
 
 
 
