@@ -27,8 +27,15 @@ dir <- 'D:/Documents/WWF_PlastikLeakage_Vietnam/data'
 ## data downloaded for time period: 01.10.2016-01.10.2021
 
 
+#### 0. Country Boundaries
+
+## download country boundary of Vietnam from GADM via inbuilt function
+vietnam <- getData('GADM', country='VNM', level=0)
+
+
+
 #### 1. Precipitation (daily)
- 
+
 ## a) NOAA GHCN (daily)
 # downloaded from: https://www.ncdc.noaa.gov/cdo-web/datasets/GHCND/locations/FIPS:VM/detail
 # downloaded in metric units (mm)
@@ -40,9 +47,79 @@ prcp_noaa <- read_csv(paste(dir, "/2755974.csv", sep = ""))
 prcp_meteostat <- read_csv(paste(dir, "/Meteostat_PrecipitationDaily.csv", sep = ""))
 
 
+
 #### 2. Wind Speed (hourly)
+
 ## downloaded via python API
 wind_meteostat <- read_csv(paste(dir, "/Meteostat_WindHourly.csv", sep = ""))
+
+
+
+#### 3. Water Areas (JRC Global Surface Water)
+## downloaded via Google Earth Engine
+jrc_water1 <- raster(paste(dir, "/JRC_GlobalSurfaceWater_Vietnam-0000000000-0000000000.tif", sep = ""))
+jrc_water2 <- raster(paste(dir, "/JRC_GlobalSurfaceWater_Vietnam-0000046592-0000000000.tif", sep = ""))
+
+# Mosaic/merge raster tiles into one image
+jrc_water <- mosaic(jrc_water1, jrc_water2, fun=mean)
+
+## mask image to extent of Vietnam
+mask <- jrc_water
+mask[mask == 0] <- NA
+jrc_water <- mask(x = jrc_water, mask = mask)
+
+plot(jrc_water1)
+plot(jrc_water2)
+
+plot(jrc_water, main = "JRC Global Surface Water")
+plot(vietnam, add=T)
+
+
+
+#### 4. Natural Hazards (Flooding & Storm)
+
+#### a) Flooding
+
+
+
+
+#### b) Storm
+
+
+
+
+
+#### 5. Topography - DEM (Digital Elevation Model)
+
+# ## download SRTM 90m DEM tiles
+# srtm1 <- getData('SRTM', lon=103, lat=10)
+# srtm2 <- getData('SRTM', lon=106, lat=15)
+# srtm3 <- getData('SRTM', lon=106, lat=20)
+# 
+# plot(srtm3)
+# plot(vietnam, add=T)
+# 
+# # Mosaic/merge srtm tiles
+# srtmmosaic <- mosaic(srtm, srtm2, srtm3, fun=mean)
+
+
+# import DEM of Vietnam (30m) as RasterLayer
+dem <- raster(paste(dir, "/dem/dem_compress.tif", sep = ""))
+
+# calculate slope
+dem_slope <- terrain(dem, opt = 'slope')
+
+plot(dem, main = "Elevation (DEM)")
+plot(vietnam, add=T)
+
+plot(dem_slope, main = "Slope (DEM)")
+plot(vietnam, add=T)
+
+
+
+
+#### 6. Waste Generation
+
 
 
 
@@ -60,7 +137,7 @@ names(prcp_noaa) <- tolower(names(prcp_noaa))
 
 ## remove NA values (where no precipitation value recorded)
 prcp_noaa <- prcp_noaa[!is.na(prcp_noaa$prcp),]
-  
+
 ## check length of station names
 unique(prcp_noaa$station) # 5 digits
 
@@ -117,7 +194,7 @@ heavyrain_stations <- prcp_merge %>% group_by(station) %>% summarise(heavyrainda
 #### Heavy Wind days per station (>39km/h)
 heavywind_stations <- wind_meteostat %>% group_by(station) %>% summarise(heavywindhours = sum(wspd >= 39))
 
-  
+
 
 ## add coordinates to stations
 
@@ -144,7 +221,7 @@ heavywind_stations$station <- as.character(heavywind_stations$station)
 wspd_data <- left_join(heavywind_stations, station_data, by ="station")
 
 
-  
+
 
 
 #### V. create polygons from coordinates ####
@@ -153,8 +230,8 @@ wspd_data <- left_join(heavywind_stations, station_data, by ="station")
 
 ## create spatialpoints from lat, long coordinates
 prcp_stations <- SpatialPointsDataFrame(coords = c(prcp_data[,c("longitude","latitude")]),
-                                    proj4string = CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"),
-                                    data = prcp_data)
+                                        proj4string = CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"),
+                                        data = prcp_data)
 plot(prcp_stations)
 
 ## export as shapefile
