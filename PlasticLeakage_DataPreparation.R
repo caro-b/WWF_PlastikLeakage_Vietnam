@@ -10,7 +10,7 @@
 #### I. SETUP ####
 
 # install required packages (if not installed yet)
-packagelist <- c("basemaps","dplyr","gdalUtils","ggmap","raster","reproducible","rgdal","rgis","sp","SpaDES","tidyverse")
+packagelist <- c("basemaps","dplyr","gdalUtils","ggmap","raster","reproducible","rgeos","rgdal","sp","SpaDES","tidyverse")
 new.packages <- packagelist[!(packagelist %in% installed.packages()[,"Package"])]
 if(length(new.packages)) install.packages(new.packages)
 
@@ -61,11 +61,7 @@ wind_meteostat <- read_csv(paste(dir, "/Meteostat_WindHourly.csv", sep = ""))
 
 #### 3. Water Areas (JRC Global Surface Water)
 ## downloaded via Google Earth Engine & processed in QGIS (faster & less memory)
-jrc_water <- raster(paste(dir, "/JRC_GlobalSurfaceWater_Vietnam_clipped.tif", sep = ""))
-#plot(basemap)
-plot(vietnam)
-plot(jrc_water, add=T)
-
+#jrc_water <- raster(paste(dir, "/JRC_GlobalSurfaceWater_Vietnam_clipped.tif", sep = ""))
 jrc_water1 <- raster(paste(dir, "/JRC_GlobalSurfaceWater_Vietnam-0000000000-0000000000.tif", sep = ""))
 jrc_water2 <- raster(paste(dir, "/JRC_GlobalSurfaceWater_Vietnam-0000046592-0000000000.tif", sep = ""))
 
@@ -75,6 +71,7 @@ jrc_water_merged <- do.call(merge, x)
 plot(jrc_water)
 # writeRaster(jrc_water, file="jrc_water.tif", format="GTiff")
 
+## mask raster to outline of vietnam
 # faster than raster mask function (as big RasterLayer)
 jrc_water_masked <- fastMask(jrc_water, vietnam)
 plot(jrc_water_masked)
@@ -88,12 +85,28 @@ plot(jrc_water_masked)
 
 
 #### b) Storm
+storm <- readOGR(paste(dir, "/unisys_tracks_1956_2018dec31/UNISYS_tracks_1956_2018Dec31.shp", sep = ""))
+#storm_vnm <- readOGR("D:/Documents/WWF/UNISYS_tracks_1956_2018_VNM_rep.shp")
+
+## first change CRS to WGS84
+crs(storm)
+crs(vietnam)
+# may take some time
+storm_wgs84 <- spTransform(storm, crs(vietnam))
+
+## spatial subsetting (faster than masking complete dataset)
+storm_vnm <- storm_wgs84[vietnam, ]
+
+## mask raster to outline of vietnam
+storm_vnm <- gIntersection(storm_vnm, vietnam)
+plot(storm_vnm)
+plot(vietnam, add =T)
 
 
 
 #### 5. Topography - DEM (Digital Elevation Model)
 
-# ## download SRTM 90m DEM tiles
+## download SRTM 90m DEM tiles
 # srtm1 <- getData('SRTM', lon=103, lat=10)
 # srtm2 <- getData('SRTM', lon=106, lat=15)
 # srtm3 <- getData('SRTM', lon=106, lat=20)
@@ -165,6 +178,19 @@ sum(duplicated(wind_meteostat[,1:3])) #0
 
 
 
+#### 4. Natural Hazards (Flooding & Storm)
+
+#### a) Flooding
+
+
+
+#### b) Storm
+
+## remove not needed columns
+
+
+
+
 #### IV. DATA MERGING ####
 
 #### Precipitation (daily)
@@ -185,6 +211,7 @@ sum(duplicated(prcp_merge[,1:2])) #4443
 
 ## for multiple prcp values at same station & date - take average
 prcp_merge <- prcp_merge %>% group_by(station, date) %>% summarize(prcp_mean=mean(prcp))
+
 
 
 
