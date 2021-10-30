@@ -10,7 +10,7 @@
 #### I. SETUP ####
 
 # install required packages (if not installed yet)
-packagelist <- c("basemaps","dplyr","gdalUtils","raster","rgdal","sp","SpaDES","tidyverse")
+packagelist <- c("basemaps","dplyr","gdalUtils","ggmap","raster","reproducible","rgdal","rgis","sp","SpaDES","tidyverse")
 new.packages <- packagelist[!(packagelist %in% installed.packages()[,"Package"])]
 if(length(new.packages)) install.packages(new.packages)
 
@@ -32,6 +32,10 @@ dir <- 'D:/Documents/WWF_PlastikLeakage_Vietnam/data'
 ## download country boundary of Vietnam from GADM via inbuilt function
 vietnam <- getData('GADM', country='VNM', level=0)
 
+
+## basemap
+basemap <- get_map(c(102.170435826, 8.59975962975, 109.33526981, 23.3520633001), zoom=7, source = 'osm')
+plot(basemap)
 
 
 #### 1. Precipitation (daily)
@@ -56,50 +60,24 @@ wind_meteostat <- read_csv(paste(dir, "/Meteostat_WindHourly.csv", sep = ""))
 
 
 #### 3. Water Areas (JRC Global Surface Water)
-## downloaded via Google Earth Engine
+## downloaded via Google Earth Engine & processed in QGIS (faster & less memory)
 jrc_water <- raster(paste(dir, "/JRC_GlobalSurfaceWater_Vietnam_clipped.tif", sep = ""))
+#plot(basemap)
+plot(vietnam)
+plot(jrc_water, add=T)
+
+jrc_water1 <- raster(paste(dir, "/JRC_GlobalSurfaceWater_Vietnam-0000000000-0000000000.tif", sep = ""))
+jrc_water2 <- raster(paste(dir, "/JRC_GlobalSurfaceWater_Vietnam-0000046592-0000000000.tif", sep = ""))
+
+## merge tiles into one image
+x <- list(jrc_water1, jrc_water2)
+jrc_water_merged <- do.call(merge, x)
 plot(jrc_water)
-plot(vietnam, add=T)
+# writeRaster(jrc_water, file="jrc_water.tif", format="GTiff")
 
-basemap_raster(vietnam)
-
-## mask image to extent of Vietnam
-mask <- jrc_water
-# 0 values to be NA so they don't get mapped
-mask[mask == 0] <- NA
-plot(mask)
-#jrc_water_masked <- mask(x = jrc_water2, mask = mask)
-
-#jrc_water1 <- raster(paste(dir, "/JRC_GlobalSurfaceWater_Vietnam-0000000000-0000000000.tif", sep = ""))
-#jrc_water2 <- raster(paste(dir, "/JRC_GlobalSurfaceWater_Vietnam-0000046592-0000000000.tif", sep = ""))
-
-## use gdal for merging (faster than raster function)
-# all_my_rasts <- c(paste(dir, "/JRC_GlobalSurfaceWater_Vietnam-0000000000-0000000000.tif", sep = ""),
-#                    paste(dir, "/JRC_GlobalSurfaceWater_Vietnam-0000046592-0000000000.tif", sep = ""))
-#                   
-# template <- raster(vietnam)
-# projection(template) <- '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs'
-# writeRaster(template, file="MyBigNastyRasty.tif", format="GTiff")
-# mosaic_rasters(gdalfile=all_my_rasts,dst_dataset="MyBigNastyRasty.tif",of="GTiff", overwrite =T)
-# gdalinfo("MyBigNastyRasty.tif")
-
-# Mosaic/merge raster tiles into one image
-#jrc_water <- merge(jrc_water1, jrc_water2, extent = extent(vietnam))
-
-# # merge tiles into one image
-# x <- list(jrc_water1, jrc_water2)
-# jrc_water <- do.call(merge, x)
-# plot(jrc_water)
-# #writeRaster(jrc_water, file="jrc_water.tif", format="GTiff")
-
-# ## trim raster
-# jrc_water1_trim <- trim(jrc_water1, values=c(NA,0))
-# plot(jrc_water1_trim)
-
-# ## tile too big - first split raster into 2 tiles
-# tiles <- splitRaster(jrc_water1, ny = 2)
-# jrc_water1a <- tiles[[1]]
-# jrc_water1b <- tiles[[2]]
+# faster than raster mask function (as big RasterLayer)
+jrc_water_masked <- fastMask(jrc_water, vietnam)
+plot(jrc_water_masked)
 
 
 
@@ -109,10 +87,7 @@ plot(mask)
 
 
 
-
 #### b) Storm
-
-
 
 
 
