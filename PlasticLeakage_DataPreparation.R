@@ -4,13 +4,13 @@
 ## December 2021
 ## Email: caroline.busse@stud-mail.uni-wuerzburg.de
 ## R version: 4.1.1, Operating system: Windows 10
-
+##
 
 
 #### I. SETUP ####
 
 # install required packages (if not installed yet)
-packagelist <- c("basemaps","dplyr","gdalUtils","ggmap","raster","reproducible","rgeos","rgdal","sp","SpaDES","tidyverse")
+packagelist <- c("basemaps","dplyr","gdalUtils","ggmap","raster","reproducible","rgeos","rgdal","sf","sp","SpaDES","tidyverse")
 new.packages <- packagelist[!(packagelist %in% installed.packages()[,"Package"])]
 if(length(new.packages)) install.packages(new.packages)
 
@@ -37,18 +37,18 @@ vietnam <- getData('GADM', country='VNM', level=0)
 ## a) NOAA GHCN (daily)
 # downloaded from: https://www.ncdc.noaa.gov/cdo-web/datasets/GHCND/locations/FIPS:VM/detail
 # downloaded in metric units (mm)
-prcp_noaa <- read_csv(paste(dir, "/2755974.csv", sep = ""), encoding = "UTF-8")
+prcp_noaa <- read_csv(paste(dir, "/2755974.csv", sep = ""))
 
 
 ## b) Meteostat
 ## downloaded via python API
-prcp_meteostat <- read_csv(paste(dir, "/Meteostat_PrecipitationDaily.csv", sep = ""), encoding = "UTF-8")
+prcp_meteostat <- read_csv(paste(dir, "/Meteostat_PrecipitationDaily.csv", sep = ""))
 
 
 #### 2. Wind Speed (hourly)
 
 ## downloaded via python API
-wind_meteostat <- read_csv(paste(dir, "/Meteostat_WindHourly.csv", sep = ""), encoding = "UTF-8")
+wind_meteostat <- read_csv(paste(dir, "/Meteostat_WindHourly.csv", sep = ""))
 
 
 
@@ -194,7 +194,6 @@ sum(duplicated(prcp_merge[,1:2])) #4443
 
 ## for multiple prcp values at same station & date - take average
 prcp_merge <- prcp_merge %>% group_by(station, date) %>% summarize(prcp_mean=mean(prcp))
-
 
 
 
