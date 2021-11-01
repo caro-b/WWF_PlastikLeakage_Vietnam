@@ -3,7 +3,7 @@
 ## Author: Caroline Busse
 ## December 2021
 ## Email: caroline.busse@stud-mail.uni-wuerzburg.de
-##
+## R version: 4.1.1, Operating system: Windows 10
 
 
 
@@ -24,57 +24,54 @@ dir <- 'D:/Documents/WWF_PlastikLeakage_Vietnam/data'
 
 ### II. DATA IMPORT ####
 
-## data downloaded for time period: 01.10.2016-01.10.2021
-
-
-#### 0. Country Boundaries
-
 ## download country boundary of Vietnam from GADM via inbuilt function
 vietnam <- getData('GADM', country='VNM', level=0)
 
 
-## basemap
-basemap <- get_map(c(102.170435826, 8.59975962975, 109.33526981, 23.3520633001), zoom=7, source = 'osm')
-plot(basemap)
+#### Plastic Leakage Factors
 
+## data downloaded for time period: 01.10.2016-01.10.2021
 
 #### 1. Precipitation (daily)
 
 ## a) NOAA GHCN (daily)
 # downloaded from: https://www.ncdc.noaa.gov/cdo-web/datasets/GHCND/locations/FIPS:VM/detail
 # downloaded in metric units (mm)
-prcp_noaa <- read_csv(paste(dir, "/2755974.csv", sep = ""))
+prcp_noaa <- read_csv(paste(dir, "/2755974.csv", sep = ""), encoding = "UTF-8")
 
 
 ## b) Meteostat
 ## downloaded via python API
-prcp_meteostat <- read_csv(paste(dir, "/Meteostat_PrecipitationDaily.csv", sep = ""))
-
+prcp_meteostat <- read_csv(paste(dir, "/Meteostat_PrecipitationDaily.csv", sep = ""), encoding = "UTF-8")
 
 
 #### 2. Wind Speed (hourly)
 
 ## downloaded via python API
-wind_meteostat <- read_csv(paste(dir, "/Meteostat_WindHourly.csv", sep = ""))
+wind_meteostat <- read_csv(paste(dir, "/Meteostat_WindHourly.csv", sep = ""), encoding = "UTF-8")
 
 
 
 #### 3. Water Areas (JRC Global Surface Water)
 ## downloaded via Google Earth Engine & processed in QGIS (faster & less memory)
-#jrc_water <- raster(paste(dir, "/JRC_GlobalSurfaceWater_Vietnam_clipped.tif", sep = ""))
-jrc_water1 <- raster(paste(dir, "/JRC_GlobalSurfaceWater_Vietnam-0000000000-0000000000.tif", sep = ""))
-jrc_water2 <- raster(paste(dir, "/JRC_GlobalSurfaceWater_Vietnam-0000046592-0000000000.tif", sep = ""))
+jrc_water <- raster(paste(dir, "/JRC_GlobalSurfaceWater_Vietnam_clipped.tif", sep = ""))
+plot(jrc_water)
+# jrc_water1 <- raster(paste(dir, "/JRC_GlobalSurfaceWater_Vietnam-0000000000-0000000000.tif", sep = ""))
+# jrc_water2 <- raster(paste(dir, "/JRC_GlobalSurfaceWater_Vietnam-0000046592-0000000000.tif", sep = ""))
 
 ## merge tiles into one image
-x <- list(jrc_water1, jrc_water2)
-jrc_water_merged <- do.call(merge, x)
-plot(jrc_water)
-# writeRaster(jrc_water, file="jrc_water.tif", format="GTiff")
+# may take some time to run
+# jrc_water_merged <- do.call(merge, c(jrc_water1, jrc_water2))
 
-## mask raster to outline of vietnam
-# faster than raster mask function (as big RasterLayer)
-jrc_water_masked <- fastMask(jrc_water, vietnam)
-plot(jrc_water_masked)
+## spatial subsetting (faster than masking complete dataset)
+# jrc_water_masked <- jrc_water_merged[vietnam, ]
+# plot(jrc_water_masked)
+# 
+# ## mask raster to outline of vietnam
+# # faster than raster mask function (as big RasterLayer) (may take some time to run)
+# m <- list(jrc_water_merged, vietnam)
+# jrc_water_masked <- fastMask(jrc_water_merged, vietnam)
+# plot(jrc_water_masked)
 
 
 
@@ -83,10 +80,8 @@ plot(jrc_water_masked)
 #### a) Flooding
 
 
-
 #### b) Storm
-storm <- readOGR(paste(dir, "/unisys_tracks_1956_2018dec31/UNISYS_tracks_1956_2018Dec31.shp", sep = ""))
-#storm_vnm <- readOGR("D:/Documents/WWF/UNISYS_tracks_1956_2018_VNM_rep.shp")
+storm <- readOGR(paste(dir, "/unisys_tracks_1956_2018dec31/UNISYS_tracks_1956_2018Dec31.shp", sep = ""), use_iconv = TRUE, encoding = "UTF-8")
 
 ## first change CRS to WGS84
 crs(storm)
@@ -105,19 +100,6 @@ plot(vietnam, add =T)
 
 
 #### 5. Topography - DEM (Digital Elevation Model)
-
-## download SRTM 90m DEM tiles
-# srtm1 <- getData('SRTM', lon=103, lat=10)
-# srtm2 <- getData('SRTM', lon=106, lat=15)
-# srtm3 <- getData('SRTM', lon=106, lat=20)
-# 
-# plot(srtm3)
-# plot(vietnam, add=T)
-# 
-# # Mosaic/merge srtm tiles
-# srtmmosaic <- mosaic(srtm, srtm2, srtm3, fun=mean)
-
-
 # import DEM of Vietnam (30m) as RasterLayer
 dem <- raster(paste(dir, "/dem/dem_compress.tif", sep = ""))
 
@@ -132,9 +114,9 @@ plot(vietnam, add=T)
 
 
 
-
 #### 6. Waste Generation
-
+waste <- readOGR(paste(dir, "/gadm36_VNM_1_wasterperprovince_2003_UTM48N.shp", sep = ""), use_iconv = TRUE, encoding = "UTF-8")
+plot(waste)
 
 
 
@@ -178,16 +160,17 @@ sum(duplicated(wind_meteostat[,1:3])) #0
 
 
 
-#### 4. Natural Hazards (Flooding & Storm)
-
-#### a) Flooding
-
-
-
-#### b) Storm
-
+#### 6. Waste Generation
 ## remove not needed columns
+waste$GID_0 <- NULL
+waste$NAME_0 <- NULL
+waste$GID_1 <- NULL
+waste$NAME_1 <- NULL
+waste$TYPE_1 <- NULL
+waste$areacode <- NULL
 
+## rename columns
+names(waste) <- c("location","type","waste_t_y")
 
 
 
@@ -224,20 +207,9 @@ heavyrain_stations <- prcp_merge %>% group_by(station) %>% summarise(heavyrainda
 heavywind_stations <- wind_meteostat %>% group_by(station) %>% summarise(heavywindhours = sum(wspd >= 39))
 
 
-
 ## add coordinates to stations
-
-## station location data - from meteostat data (as noaa is only one of its sources)
+# station location data - from meteostat data (as noaa is only one of its sources)
 station_data <- unique(prcp_meteostat[,c(1,4:6)])
-
-
-## 1. Precipitation
-
-## join extra station information to prcp data
-prcp_data <- left_join(heavyrain_stations, station_data, by ="station")
-
-
-## 2. Wind
 
 # first convert to same data type
 typeof(heavywind_stations$station) # double
@@ -246,37 +218,24 @@ typeof(station_data$station) # character
 # change to character data type
 heavywind_stations$station <- as.character(heavywind_stations$station)
 
-## join extra station information to wspd data
-wspd_data <- left_join(heavywind_stations, station_data, by ="station")
+## merge prcp & wspd data
+climate_data <- full_join(heavyrain_stations, heavywind_stations, by ="station") 
+
+## join extra station information to climate data
+climate_data <- left_join(climate_data, station_data, by ="station")
 
 
 
+#### V. create points from coordinates ####
 
-
-#### V. create polygons from coordinates ####
-
-#### 1. Precipitation (daily)
+#### 1. Climate Data
 
 ## create spatialpoints from lat, long coordinates
-prcp_stations <- SpatialPointsDataFrame(coords = c(prcp_data[,c("longitude","latitude")]),
+climate_stations <- SpatialPointsDataFrame(coords = c(climate_data[,c("longitude","latitude")]),
                                         proj4string = CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"),
-                                        data = prcp_data)
-plot(prcp_stations)
+                                        data = climate_data)
+plot(climate_stations)
 
 ## export as shapefile
-shapefile(x = prcp_stations, filename = paste(dir, "/precipitation_stations_VN.shp", sep = ""), overwrite=T)
-
-
-#### 2. Wind (hourly)
-
-## create spatialpoints from lat, long coordinates
-wspd_stations <- SpatialPointsDataFrame(coords = c(wspd_data[,c("longitude","latitude")]),
-                                        proj4string = CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"),
-                                        data = wspd_data)
-plot(wspd_stations)
-
-shapefile(x = wspd_stations, filename = paste(dir, "/windspeed_stations_VN.shp", sep = ""), overwrite=T)
-
-
-#### TODO: combine prcp & wspd into one shapefile?? ####
+shapefile(x = climate_stations, filename = paste(dir, "/climate_stations_VN.shp", sep = ""), overwrite=T)
 
