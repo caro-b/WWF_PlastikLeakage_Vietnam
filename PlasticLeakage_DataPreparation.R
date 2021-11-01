@@ -104,12 +104,18 @@ plot(vietnam, add =T)
 dem <- raster(paste(dir, "/dem/dem_compress.tif", sep = ""))
 
 # calculate slope
-dem_slope <- terrain(dem, opt = 'slope')
+slope <- terrain(dem, opt = 'slope')
 
-plot(dem, main = "Elevation (DEM)")
+# add slope as band
+dem <- stack(dem, slope)
+
+# rename band
+names(dem)[[1]] <- "elevation"
+
+plot(dem$elevation, main = "Elevation (DEM)")
 plot(vietnam, add=T)
 
-plot(dem_slope, main = "Slope (DEM)")
+plot(dem$slope, main = "Slope (DEM)")
 plot(vietnam, add=T)
 
 
