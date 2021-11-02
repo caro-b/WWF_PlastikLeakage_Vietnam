@@ -81,21 +81,8 @@ plot(jrc_water)
 
 
 #### b) Storm
+# may take some time (big dataset)
 storm <- readOGR(paste(dir, "/unisys_tracks_1956_2018dec31/UNISYS_tracks_1956_2018Dec31.shp", sep = ""), use_iconv = TRUE, encoding = "UTF-8")
-
-## first change CRS to WGS84
-crs(storm)
-crs(vietnam)
-# may take some time
-storm_wgs84 <- spTransform(storm, crs(vietnam))
-
-## spatial subsetting (faster than masking complete dataset)
-storm_vnm <- storm_wgs84[vietnam, ]
-
-## mask raster to outline of vietnam
-storm_vnm <- gIntersection(storm_vnm, vietnam)
-plot(storm_vnm)
-plot(vietnam, add =T)
 
 
 
@@ -163,6 +150,36 @@ wind_meteostat <- rename(wind_meteostat, datetime = time)
 
 ## number of duplicates in station, datetime & wind speed
 sum(duplicated(wind_meteostat[,1:3])) #0
+
+
+
+#### 4. Natural Hazards (Flooding & Storm)
+
+#### a) Flooding
+
+
+#### b) Storm
+## only keep needed rows
+storm <- storm[,names(storm) %in% c("ADV_DATE","ADV_HOUR","SPEED")]
+
+## convert data to simple feature object (sf) (for easier operation & later plotting with ggplot)
+storm_sf <- st_as_sf(storm)
+
+## first change CRS to WGS84
+crs(storm_sf)
+crs(vietnam)
+
+storm_sf_wgs84 <- st_transform(storm_sf, crs(vietnam))
+
+## clip to outline of vietnam
+storm_vnm <- st_intersection(storm_sf_wgs84, st_as_sf(vietnam))
+
+## remove not needed columns
+storm_vnm$GID_0 <- NULL
+storm_vnm$NAME_0 <- NULL
+
+plot(storm_vnm$geometry)
+plot(vietnam, add =T)
 
 
 
