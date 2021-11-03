@@ -10,7 +10,7 @@
 #### I. SETUP ####
 
 # install required packages (if not installed yet)
-packagelist <- c("basemaps","dplyr","gdalUtils","ggmap","raster","reproducible","rgeos","rgdal","sf","sp","SpaDES","tidyverse")
+packagelist <- c("basemaps","dplyr","gdalUtils","ggmap","raster","reproducible","rgeos","rgdal","sf","sp","SpaDES","stars","starsExtra","tidyverse")
 new.packages <- packagelist[!(packagelist %in% installed.packages()[,"Package"])]
 if(length(new.packages)) install.packages(new.packages)
 
@@ -73,6 +73,10 @@ plot(jrc_water)
 # jrc_water_masked <- fastMask(jrc_water_merged, vietnam)
 # plot(jrc_water_masked)
 
+# remove NAs & cells with value 0 (= no water occurrence)
+#jrc_water_vector <- rasterToPolygons(jrc_water, fun = function(x){x>0}, na.rm = T, dissolve = T)
+
+
 
 
 #### 4. Natural Hazards (Flooding & Storm)
@@ -89,20 +93,35 @@ storm <- readOGR(paste(dir, "/unisys_tracks_1956_2018dec31/UNISYS_tracks_1956_20
 #### 5. Topography - DEM (Digital Elevation Model)
 # import DEM of Vietnam (30m) as RasterLayer
 dem <- raster(paste(dir, "/dem/dem_compress.tif", sep = ""))
+#dem <- read_stars(paste(dir, "/dem/dem_compress.tif", sep = ""))
+plot(dem)
+
+# ## mask & crop stars object
+# dem_subset <- dem[st_as_sf(vietnam)]
+# plot(dem_subset)
+# 
+# # requires 
+# test <- st_transform(dem_subset, "+proj=utm +zone=48 +datum=WGS84 +units=m +no_defs +type=crs")
+# dem_slope <- slope(test)
+
+dem_subset <- dem
+# remove NA values
+dem_subset[dem_subset <= 0] <- NA
+plot(dem_subset)
 
 # calculate slope
-slope <- terrain(dem, opt = 'slope')
+slope <- terrain(dem_subset, opt = 'slope')
 
 # add slope as band
-dem <- stack(dem, slope)
+dem_stack <- stack(dem_subset, slope)
 
 # rename band
-names(dem)[[1]] <- "elevation"
+names(dem_stack)[[1]] <- "elevation"
 
-plot(dem$elevation, main = "Elevation (DEM)")
+plot(dem_stack$elevation, main = "Elevation (DEM)")
 plot(vietnam, add=T)
 
-plot(dem$slope, main = "Slope (DEM)")
+plot(dem_stack$slope, main = "Slope (DEM)")
 plot(vietnam, add=T)
 
 
