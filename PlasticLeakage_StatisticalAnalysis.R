@@ -117,45 +117,85 @@ nearest_water <- function(landfills_factors) {
 
 
 
-## loop over landfills - take one landfill at once & find nearest climate station
-# index for loop
-i <- 1
-while (i <= length(landfills_factors$geometry)) {
-  # use function to find nearest station & save climate attributes into sf object
-  landfills_factors <- nearest_climate_station(landfills_factors)
-  landfills_factors <- nearest_water(landfills_factors)
-  ## increment i
-  i <- i+1
+#### 4. Natural Hazards (Flooding & Storm)
+#### (a) Flood Proneness)
+
+
+#### b) Storm Tracks
+
+# initiate columns with dummy variable
+landfills_factors$no_storms <- -1
+
+## function to find nearest water & save corresponding data
+find_storms <- function(landfills_factors) {
+  
+  # get water in 1km buffer around landfill - then high risk
+  buffer <- buffer(landfills[i,], width = 0.005)
+  
+  # intersect to get storm tracks in buffer
+  storm <- st_intersection(storm_vnm, st_as_sf(buffer))
+  
+  # count number of storm tracks in buffer - higher risk
+  landfills_factors[i,]$no_storms <- nrow(storm)
+  
+  return(landfills_factors)
 }
 
 
 
-
-#### 4. Natural Hazards (Flooding & Storm)
-#### a) Flood Proneness
-
-
-
-
-#### b) Storm
-## polygons of storm tracks --> nearest
-storm_vnm
-
-
-
 #### 5. Topography - DEM (Digital Elevation Model)
-## raster of whole vietnam - average value of area
-plot(slope)
-plot(landfills_sf_centroids$geometry, add=T)
-plot(landfills[1,])
-first <- landfills[1,]
-test <- intersect(slope, first)
-slope_mean <- mean(values(test))
+
+landfills_factors$slope <- -1
+
+## function to get DEM slope values per landfill
+mean_slope <- function(landfills_factors) {
+  
+  slope_area <- intersect(slope, landfills[i,])
+  landfills_factors[i,]$slope <- mean(values(slope_area))
+  
+  return(landfills_factors)
+}
 
 
 
 #### 6. Waste Generation
 ## polygon per province --> in which polygon landfill lies in
+waste_sf <- st_as_sf(waste)
+
+# convert CRS to get matching CRS
+landfills_sf <- st_transform(landfills_sf, crs(waste_sf))
+
+landfills_factors$waste <- -1
+
+waste_province <- function(landfills_factors) {
+  waste <- st_intersection(waste_sf, landfills_sf[i,], sparse=T)
+  if (nrow(waste) != 0) {
+    landfills_factors[i,]$waste <- waste$waste_t_y
+  } else {
+    landfills_factors[i,]$waste <- NA
+  }
+  return(landfills_factors)
+}
+
+
+
+## loop over landfills - take one landfill at once & find nearest climate station
+# index for loop
+i <- 1
+while (i <= length(landfills_factors$geometry)) {
+  # function to find nearest station & save climate attributes into sf object
+  landfills_factors <- nearest_climate_station(landfills_factors)
+  # function to find nearest water body
+  landfills_factors <- nearest_water(landfills_factors)
+  # function to count storms near landfill
+  landfills_factors <- find_storms(landfills_factors)
+  # function to get mean slope per landfill area
+  landfills_factors <- mean_slope(landfills_factors)
+  # function to test in which province landfill lies & save corresponding waste generation
+  landfills_factors <- waste_province(landfills_factors)
+  ## increment i
+  i <- i+1
+}
 
 
 #### TODO: function: create risk per landfill ####
