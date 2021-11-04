@@ -10,7 +10,7 @@
 #### I. SETUP ####
 
 # install required packages (if not installed yet)
-packagelist <- c("basemaps","dplyr","gdalUtils","ggmap","raster","reproducible","rgeos","rgdal","sf","sp","SpaDES","stars","starsExtra","tidyverse")
+packagelist <- c("basemaps","cartography","dplyr","gdalUtils","ggmap","raster","reproducible","rgeos","rgdal","sf","sp","SpaDES","stars","starsdata","starsExtra","tidyverse")
 new.packages <- packagelist[!(packagelist %in% installed.packages()[,"Package"])]
 if(length(new.packages)) install.packages(new.packages)
 
@@ -54,14 +54,23 @@ wind_meteostat <- read_csv(paste(dir, "/Meteostat_WindHourly.csv", sep = ""))
 
 #### 3. Water Areas (JRC Global Surface Water)
 ## downloaded via Google Earth Engine & processed in QGIS (faster & less memory)
+## flooding data
 jrc_water <- raster(paste(dir, "/JRC_GlobalSurfaceWater_Vietnam_clipped.tif", sep = ""))
-plot(jrc_water)
+#jrc_water_perm <- raster(paste(dir, "/JRC_GlobalSurfaceWater_Vietnam_perm.tif", sep = ""))
+# reads proxy as actual raster to big
+#jrc_water_perm <- read_stars(paste(dir, "/JRC_GlobalSurfaceWater_Vietnam_perm.tif", sep = ""), NA_value = 0)
 # jrc_water1 <- raster(paste(dir, "/JRC_GlobalSurfaceWater_Vietnam-0000000000-0000000000.tif", sep = ""))
 # jrc_water2 <- raster(paste(dir, "/JRC_GlobalSurfaceWater_Vietnam-0000046592-0000000000.tif", sep = ""))
 
+#perm <- jrc_water_perm[1]
+#perm <- st_as_sf(jrc_water_perm, merge=T, na.rm=T)
+
+# perm <- jrc_water[jrc_water == 1]
+#jrc_water[jrc_water == 0] <- NULL
+
 ## merge tiles into one image
 # may take some time to run
-# jrc_water_merged <- do.call(merge, c(jrc_water1, jrc_water2))
+#jrc_water_merged <- do.call(merge, c(jrc_water1, jrc_water2))
 
 ## spatial subsetting (faster than masking complete dataset)
 # jrc_water_masked <- jrc_water_merged[vietnam, ]
@@ -73,9 +82,10 @@ plot(jrc_water)
 # jrc_water_masked <- fastMask(jrc_water_merged, vietnam)
 # plot(jrc_water_masked)
 
-# remove NAs & cells with value 0 (= no water occurrence)
-#jrc_water_vector <- rasterToPolygons(jrc_water, fun = function(x){x>0}, na.rm = T, dissolve = T)
+#jrc_water_crop <- intersect(jrc_water_merged, vietnam)
 
+# remove NAs & cells with value <50 (= seasonal water)
+#jrc_water_vector <- rasterToPolygons(jrc_water1, fun = function(x){x>=50}, na.rm = T, dissolve = T)
 
 
 
@@ -96,17 +106,17 @@ dem <- raster(paste(dir, "/dem/dem_compress.tif", sep = ""))
 #dem <- read_stars(paste(dir, "/dem/dem_compress.tif", sep = ""))
 plot(dem)
 
+#test <- as(dem_stars, "Raster")
 # ## mask & crop stars object
 # dem_subset <- dem[st_as_sf(vietnam)]
 # plot(dem_subset)
-# 
 # # requires 
 # test <- st_transform(dem_subset, "+proj=utm +zone=48 +datum=WGS84 +units=m +no_defs +type=crs")
 # dem_slope <- slope(test)
 
 dem_subset <- dem
 # remove NA values
-dem_subset[dem_subset <= 0] <- NA
+dem_subset[dem_subset < 0] <- NA
 plot(dem_subset)
 
 # calculate slope
@@ -120,7 +130,6 @@ names(dem_stack)[[1]] <- "elevation"
 
 plot(dem_stack$elevation, main = "Elevation (DEM)")
 plot(vietnam, add=T)
-
 plot(dem_stack$slope, main = "Slope (DEM)")
 plot(vietnam, add=T)
 
@@ -128,7 +137,6 @@ plot(vietnam, add=T)
 
 #### 6. Waste Generation
 waste <- readOGR(paste(dir, "/gadm36_VNM_1_wasterperprovince_2003_UTM48N.shp", sep = ""), use_iconv = TRUE, encoding = "UTF-8")
-plot(waste)
 
 
 
@@ -204,12 +212,7 @@ plot(vietnam, add =T)
 
 #### 6. Waste Generation
 ## remove not needed columns
-waste$GID_0 <- NULL
-waste$NAME_0 <- NULL
-waste$GID_1 <- NULL
-waste$NAME_1 <- NULL
-waste$TYPE_1 <- NULL
-waste$areacode <- NULL
+waste <- waste[,names(waste) %in% c("VARNAME_1","ENGTYPE_1","waste.t.y.")]
 
 ## rename columns
 names(waste) <- c("location","type","waste_t_y")
@@ -273,8 +276,8 @@ climate_data <- left_join(climate_data, station_data, by ="station")
 
 ## create spatialpoints from lat, long coordinates
 climate_stations <- SpatialPointsDataFrame(coords = c(climate_data[,c("longitude","latitude")]),
-                                        proj4string = CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"),
-                                        data = climate_data)
+                                           proj4string = CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"),
+                                           data = climate_data)
 plot(climate_stations)
 
 ## export as shapefile
