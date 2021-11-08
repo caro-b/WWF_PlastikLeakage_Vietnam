@@ -6,7 +6,7 @@
 ##
 
 
-#### 0. Import landfill Locations
+#### 0. Import landfill Locations ####
 ## import landfill polygons
 landfills <- readOGR(paste(dir, "/OpenLandfills_Vietnam/OpenLandfills_Vietnam.shp", sep = ""), use_iconv = T, encoding = "UTF-8")
 plot(landfills)
@@ -24,7 +24,7 @@ plot(landfills_sf_centroids$geometry, add = T)
 
 
 
-#### Plastic Leakage Factors
+#### Plastic Leakage Factors ####
 
 #### 1. Climatic conditions (Precipitation (daily) & Wind Speed (hourly))
 ## point data --> find nearest station
@@ -77,7 +77,7 @@ landfills_factors$flood_risk <- -1
 nearest_water <- function(landfills_factors) {
   
   # get water in 1km buffer around landfill - then high risk
-  buffer <- buffer(landfills[i,], width = 0.005)
+  buffer <- buffer(landfills[i,], width = 0.05) # 1km = 0.005
   # intersect to get water area in buffer
   water_first <- intersect(jrc_water, buffer)
 
@@ -85,7 +85,7 @@ nearest_water <- function(landfills_factors) {
   landfills_factors[i,]$flood_risk <- sum(values(water_first), na.rm=T)/ length(values(water_first)) # na values counted as 0
   
   # polygonize to calculate distance
-  water_vector <- rasterToPolygons(water_first)
+  water_vector <- rasterToPolygons(water_first, fun = function(x){x>0}, na.rm = T, dissolve = T)
   
   ## calculate minimum distance to closest water
   # account for no water in buffer
@@ -97,7 +97,7 @@ nearest_water <- function(landfills_factors) {
     landfills_factors[i,]$dist_water <- min(st_distance(st_as_sf(water_vector), landfills_sf_centroids[i,]))
     
     # calculate distance to closest permanent water (e.g. river)?? 
-    water_perm <- water_vector[water_vector$JRC_GlobalSurfaceWater_Vietnam_clipped >=50,]
+    water_perm <- water_vector[water_vector$JRC_GlobalSurfaceWater_Vietnam_new_50 >=50,]
     
     # account for no permanent water
     if (length(water_perm) != 0) {
@@ -109,11 +109,34 @@ nearest_water <- function(landfills_factors) {
   return(landfills_factors)
 }
 
+## Distance to Ocean 
 
-#### TODO: better to use river data ??? ####
-#### TODO: vietnam outline for distance to ocean ####
-#vietnam_sf <- st_as_sf(vietnam)
-#ocean <- getBorders(vietnam)
+# download coastline from naturalearth
+# coastline <- ne_download(scale = 10, type = 'coastline', category = 'physical')
+# coastline_vnm <- intersect(coastline, vietnam)
+#islands <- ne_download(scale = 10, type = 'minor_islands', category = 'physical')
+# coastline_islands <- readOGR(paste(dir, "/ne_10m_minor_islands_coastline/ne_10m_minor_islands_coastline.shp", sep = ""))
+# coastline_islands_vnm <- intersect(coastline_islands, vietnam)
+# plot(coastline_vnm)
+
+# download ocean from naturalearth
+ocean <- ne_download(scale = 10, type = 'ocean', category = 'physical')
+ocean_vnm <- intersect(ocean, vietnam)
+plot(ocean_vnm)
+
+landfills_factors$dist_ocean <- -1
+
+## function to find distance to ocean
+distance_ocean <- function(landfills_factors) {
+  
+  ## calculate the distance matrix in meters using Great Circle distance (for lat/long data)
+  dist_ocean <- st_distance(landfills_factors[i,]$geometry, st_as_sf(ocean_vnm))
+  
+  ## calculate minimum distance
+  landfills_factors[i,]$dist_ocean <- min(dist_ocean)
+  
+  return(landfills_factors)
+}
 
 
 
@@ -130,7 +153,7 @@ landfills_factors$no_storms <- -1
 find_storms <- function(landfills_factors) {
   
   # get water in 1km buffer around landfill - then high risk
-  buffer <- buffer(landfills[i,], width = 0.005)
+  buffer <- buffer(landfills[i,], width = 0.05) # 1km = 0.005
   
   # intersect to get storm tracks in buffer
   storm <- st_intersection(storm_vnm, st_as_sf(buffer))
@@ -193,9 +216,48 @@ while (i <= length(landfills_factors$geometry)) {
   landfills_factors <- mean_slope(landfills_factors)
   # function to test in which province landfill lies & save corresponding waste generation
   landfills_factors <- waste_province(landfills_factors)
+  # distance to ocean
+  landfills_factors <- distance_ocean(landfills_factors)
   ## increment i
   i <- i+1
 }
+
+
+
+#### Cluster Analysis ####
+
+## Data Preparation
+# convert to standard dataframe & only keep plastic leakage factors
+leakage_factors <- (landfills_factors %>% st_drop_geometry())[,c(2,5:13)]
+
+str(leakage_factors)
+
+# change character to double
+leakage_factors$area <- as.double(leakage_factors$area)
+
+# change character to integer proxies
+from <- c("10-30.000","30-50.000","50-70.000","70-200.000","200-300.000","300-2.500.000")
+to <- c(1,2,3,4,5,6)
+leakage_factors$waste <- plyr::mapvalues(leakage_factors$waste, from, to)
+leakage_factors$waste <- as.integer(leakage_factors$waste)
+
+## Scatter Plots of all possible factor combinations
+pairs(leakage_factors)
+
+
+## Normalize Data
+means <- apply(leakage_factors, 2, mean, na.rm=T) # apply mean calculation to columns
+sds <- apply(leakage_factors, 2, sd, na.rm=T) # apply standard deviation calculation to columns
+nor <- scale(leakage_factors, center=means, scale=sds)
+
+# distance matrix
+distance <- dist(nor)
+
+
+## K-means Clustering
+set.seed(123)
+kc <- kmeans(nor, 3) # 3 clusters
+
 
 
 #### TODO: function: create risk per landfill ####
