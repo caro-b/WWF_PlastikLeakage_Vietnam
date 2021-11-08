@@ -10,7 +10,7 @@
 #### I. SETUP ####
 
 # install required packages (if not installed yet)
-packagelist <- c("basemaps","cartography","dplyr","gdalUtils","ggmap","raster","reproducible","rgeos","rgdal","sf","sp","SpaDES","stars","starsdata","starsExtra","tidyverse")
+packagelist <- c("basemaps","cartography","dplyr","gdalUtils","ggmap","plyr","raster","reproducible","rgee","rgeos","rgdal","rnaturalearth","sf","sp","SpaDES","stars","tidyverse")
 new.packages <- packagelist[!(packagelist %in% installed.packages()[,"Package"])]
 if(length(new.packages)) install.packages(new.packages)
 
@@ -25,7 +25,9 @@ dir <- 'D:/Documents/WWF_PlastikLeakage_Vietnam/data'
 ### II. DATA IMPORT ####
 
 ## download country boundary of Vietnam from GADM via inbuilt function
-vietnam <- getData('GADM', country='VNM', level=0)
+#vietnam <- getData('GADM', country='VNM', level=0)
+# downloaded from https://data.humdata.org/dataset/viet-nam-administrative-boundaries-polygon-polyline
+vietnam <- readOGR(paste(dir, "/vietnam/vietnam_new.shp", sep = ""))
 
 
 #### Plastic Leakage Factors
@@ -45,6 +47,7 @@ prcp_noaa <- read_csv(paste(dir, "/2755974.csv", sep = ""))
 prcp_meteostat <- read_csv(paste(dir, "/Meteostat_PrecipitationDaily.csv", sep = ""))
 
 
+
 #### 2. Wind Speed (hourly)
 
 ## downloaded via python API
@@ -54,28 +57,62 @@ wind_meteostat <- read_csv(paste(dir, "/Meteostat_WindHourly.csv", sep = ""))
 
 #### 3. Water Areas (JRC Global Surface Water)
 ## downloaded via Google Earth Engine & processed in QGIS (faster & less memory)
-## flooding data
-jrc_water <- raster(paste(dir, "/JRC_GlobalSurfaceWater_Vietnam_clipped.tif", sep = ""))
+jrc_water <- raster(paste(dir, "/JRC_GlobalSurfaceWater_Vietnam_new_50.tif", sep = ""))
 #jrc_water_perm <- raster(paste(dir, "/JRC_GlobalSurfaceWater_Vietnam_perm.tif", sep = ""))
 # reads proxy as actual raster to big
 #jrc_water_perm <- read_stars(paste(dir, "/JRC_GlobalSurfaceWater_Vietnam_perm.tif", sep = ""), NA_value = 0)
-# jrc_water1 <- raster(paste(dir, "/JRC_GlobalSurfaceWater_Vietnam-0000000000-0000000000.tif", sep = ""))
-# jrc_water2 <- raster(paste(dir, "/JRC_GlobalSurfaceWater_Vietnam-0000046592-0000000000.tif", sep = ""))
+
+
+## download from Google Earth Engine
+
+## setup connection with Google Earth Engine
+# run this part individually per line (don't run it as full script)
+# need to setup a GEE account 
+# ee_install()
+# # restart R session afterwards
+# ee_Initialize()
+# # finding images
+# point <- ee$Geometry$Point(88.2924,43.3827)
+# 
+# jrc_image <- ee$Image("JRC/GSW1_3/GlobalSurfaceWater")$
+#   clip(vietnam)$
+#   select("occurrence")
+# 
+# # Define visualization parameters
+# vizParams <- list(
+#   min = 0,
+#   max = 10,
+#   bands = "occurrence"
+# )
+# 
+# Map$setCenter(88.2924,43.3827, 3)
+# Map$addLayer(jrc_image, vizParams, "JRC GSW")
+# 
+# # crop to Vietnam extent
+# extent(vietnam)
+# # geometry
+# geometry <- ee$Geometry$Rectangle(
+#   coords = c(73.5577, 34.33627, 96.36517, 49.17501),
+#   proj = "EPSG:4326",
+#   geodesic = FALSE
+# )
+# 
+# # ee as raster, crop to extent of xinjiang
+# jrc_raster <- ee_as_raster(jrc_image, region=vietnam) # also downloads raster as tiff
+# 
+
+
+
+#jrc_water[jrc_water < 0] <- NULL
 
 #perm <- jrc_water_perm[1]
 #perm <- st_as_sf(jrc_water_perm, merge=T, na.rm=T)
-
-# perm <- jrc_water[jrc_water == 1]
-#jrc_water[jrc_water == 0] <- NULL
+#perm <- jrc_water[jrc_water == 1]
 
 ## merge tiles into one image
 # may take some time to run
 #jrc_water_merged <- do.call(merge, c(jrc_water1, jrc_water2))
 
-## spatial subsetting (faster than masking complete dataset)
-# jrc_water_masked <- jrc_water_merged[vietnam, ]
-# plot(jrc_water_masked)
-# 
 # ## mask raster to outline of vietnam
 # # faster than raster mask function (as big RasterLayer) (may take some time to run)
 # m <- list(jrc_water_merged, vietnam)
@@ -104,7 +141,7 @@ storm <- readOGR(paste(dir, "/unisys_tracks_1956_2018dec31/UNISYS_tracks_1956_20
 # import DEM of Vietnam (30m) as RasterLayer
 dem <- raster(paste(dir, "/dem/dem_compress.tif", sep = ""))
 #dem <- read_stars(paste(dir, "/dem/dem_compress.tif", sep = ""))
-plot(dem)
+#plot(dem)
 
 #test <- as(dem_stars, "Raster")
 # ## mask & crop stars object
@@ -164,14 +201,14 @@ prcp_noaa$station <- substr(prcp_noaa$station, nchar(prcp_noaa$station)-4, nchar
 
 ## b) Meteostat
 ## rename columns
-prcp_meteostat <- rename(prcp_meteostat, date = time)
+prcp_meteostat <- dplyr::rename(prcp_meteostat, date = time)
 
 
 #### 2. Wind (hourly)
 
 ## a) Meteostat
 ## rename columns
-wind_meteostat <- rename(wind_meteostat, datetime = time)
+wind_meteostat <- dplyr::rename(wind_meteostat, datetime = time)
 
 ## no NAs or exact duplicates  (already checked in python download script)
 
@@ -238,17 +275,17 @@ prcp_merge <- distinct(prcp_merge)
 sum(duplicated(prcp_merge[,1:2])) #4443
 
 ## for multiple prcp values at same station & date - take average
-prcp_merge <- prcp_merge %>% group_by(station, date) %>% summarize(prcp_mean=mean(prcp))
+prcp_merge <- prcp_merge %>% group_by(station, date) %>% dplyr::summarise(prcp_mean=mean(prcp))
 
 
 
 #### IV. DATA ANALYSIS ####
 
 #### Heavy Rain days per station (>=100 mm rain per day)
-heavyrain_stations <- prcp_merge %>% group_by(station) %>% summarise(heavyraindays = sum(prcp_mean >= 100))
+heavyrain_stations <- prcp_merge %>% group_by(station) %>% dplyr::summarise(heavyraindays = sum(prcp_mean >= 100))
 
 #### Heavy Wind days per station (>39km/h)
-heavywind_stations <- wind_meteostat %>% group_by(station) %>% summarise(heavywindhours = sum(wspd >= 39))
+heavywind_stations <- wind_meteostat %>% group_by(station) %>% dplyr::summarise(heavywindhours = sum(wspd >= 39))
 
 
 ## add coordinates to stations
