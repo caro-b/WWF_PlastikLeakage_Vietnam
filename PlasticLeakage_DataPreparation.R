@@ -10,7 +10,7 @@
 #### I. SETUP ####
 
 # install required packages (if not installed yet)
-packagelist <- c("basemaps","cartography","dplyr","gdalUtils","ggmap","plyr","raster","reproducible","rgee","rgeos","rgdal","rnaturalearth","sf","sp","SpaDES","stars","tidyverse")
+packagelist <- c("cartography","dplyr","gdalUtils","raster","reproducible","rgeos","rgdal","rnaturalearth","sf","sp","SpaDES","tidyverse")
 new.packages <- packagelist[!(packagelist %in% installed.packages()[,"Package"])]
 if(length(new.packages)) install.packages(new.packages)
 
