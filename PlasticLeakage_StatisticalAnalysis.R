@@ -6,7 +6,19 @@
 ##
 
 
-#### 0. Import landfill Locations ####
+#### 0. SETUP ####
+
+# install required packages (if not installed yet)
+packagelist <- c("cartography","cluster","dplyr","factoextra","gdalUtils","ggmap","plyr","raster","reproducible","rgeos","rgdal","sf","sp","tidyverse")
+new.packages <- packagelist[!(packagelist %in% installed.packages()[,"Package"])]
+if(length(new.packages)) install.packages(new.packages)
+
+# load required packages
+lapply(packagelist, require, character.only = TRUE)
+
+
+
+#### I. Import landfill Locations ####
 ## import landfill polygons
 landfills <- readOGR(paste(dir, "/OpenLandfills_Vietnam/OpenLandfills_Vietnam.shp", sep = ""), use_iconv = T, encoding = "UTF-8")
 plot(landfills)
@@ -24,7 +36,7 @@ plot(landfills_sf_centroids$geometry, add = T)
 
 
 
-#### Plastic Leakage Factors ####
+#### II. Plastic Leakage Factors ####
 
 #### 1. Climatic conditions (Precipitation (daily) & Wind Speed (hourly))
 ## point data --> find nearest station
@@ -77,15 +89,17 @@ landfills_factors$flood_risk <- -1
 nearest_water <- function(landfills_factors) {
   
   # get water in 1km buffer around landfill - then high risk
-  buffer <- buffer(landfills[i,], width = 0.05) # 1km = 0.005
+  buffer <- buffer(landfills[i,], width = 0.005) # 1km = 0.005
   # intersect to get water area in buffer
   water_first <- intersect(jrc_water, buffer)
-
-  ## water occurrence value - higher flood risk
+  ## flood risk (% flooded)
   landfills_factors[i,]$flood_risk <- sum(values(water_first), na.rm=T)/ length(values(water_first)) # na values counted as 0
   
+  # get broader buffer for distances to water bodies
+  buffer_broad <- buffer(landfills[i,], width = 0.05)
+  water_first_broad <- intersect(jrc_water, buffer_broad)
   # polygonize to calculate distance
-  water_vector <- rasterToPolygons(water_first, fun = function(x){x>0}, na.rm = T, dissolve = T)
+  water_vector <- rasterToPolygons(water_first_broad, fun = function(x){x>0}, na.rm = T, dissolve = T)
   
   ## calculate minimum distance to closest water
   # account for no water in buffer
@@ -222,41 +236,74 @@ while (i <= length(landfills_factors$geometry)) {
   i <- i+1
 }
 
+## download dataframe as CSV
+write.csv(landfills_factors, paste(dir, "/landfill_factors.csv", sep = ""), row.names = F)
 
 
-#### Cluster Analysis ####
+
+#### III. Cluster Analysis ####
 
 ## Data Preparation
 # convert to standard dataframe & only keep plastic leakage factors
-leakage_factors <- (landfills_factors %>% st_drop_geometry())[,c(2,5:13)]
+leakage_factors <- (landfills_factors %>% st_drop_geometry())[,c(2,5:14)]
 
 str(leakage_factors)
 
 # change character to double
 leakage_factors$area <- as.double(leakage_factors$area)
 
-# change character to integer proxies
+# change character to integer values
 from <- c("10-30.000","30-50.000","50-70.000","70-200.000","200-300.000","300-2.500.000")
-to <- c(1,2,3,4,5,6)
+to <- c(10000,30000,50000,70000,200000,300000)
 leakage_factors$waste <- plyr::mapvalues(leakage_factors$waste, from, to)
 leakage_factors$waste <- as.integer(leakage_factors$waste)
 
 ## Scatter Plots of all possible factor combinations
 pairs(leakage_factors)
 
+## remove rows with NA data
+leakage_factors_clean <- na.omit(leakage_factors)
 
 ## Normalize Data
-means <- apply(leakage_factors, 2, mean, na.rm=T) # apply mean calculation to columns
-sds <- apply(leakage_factors, 2, sd, na.rm=T) # apply standard deviation calculation to columns
-nor <- scale(leakage_factors, center=means, scale=sds)
+# to mean= 0 & standard deviaion = 1
+leakage_factors_norm <- scale(leakage_factors_clean)
 
-# distance matrix
-distance <- dist(nor)
+head(leakage_factors_norm)
 
 
-## K-means Clustering
+#### K-means Clustering (Unsupervised Machine Learning)
+
+## first find optimal numbers of clusters
+fviz_nbclust(leakage_factors_norm, kmeans, method = "wss")
+
+# Berechnen Sie die Lückenstatistik basierend auf der Anzahl der Cluster
+gap_stat <- clusGap(leakage_factors_norm,
+                    FUN = kmeans,
+                    nstart = 25,
+                    K.max = 10,
+                    B = 50)
+
+# Plotten der Anzahl der Cluster vs. Lückenstatistik
+fviz_gap_stat(gap_stat)
+
+
+# set seed to make clustering reproducible
 set.seed(123)
-kc <- kmeans(nor, 3) # 3 clusters
+km <- kmeans(leakage_factors_norm, 3, nstart = 25) # 3 clusters (low, medium & high risk)
+
+# plot clustering results
+fviz_cluster(km, data = leakage_factors_norm)
+
+
+# mean factor values per Cluster
+aggregate(leakage_factors_clean, by=list(cluster=km$cluster), mean)
+
+
+# add clusters to original data
+final_data <- cbind(leakage_factors_clean, cluster = km$cluster)
+
+#Enddaten anzeigen
+head(final_data)
 
 
 
