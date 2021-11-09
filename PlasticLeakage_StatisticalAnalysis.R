@@ -245,7 +245,7 @@ write.csv(landfills_factors, paste(dir, "/landfill_factors.csv", sep = ""), row.
 
 ## Data Preparation
 # convert to standard dataframe & only keep plastic leakage factors
-leakage_factors <- (landfills_factors %>% st_drop_geometry())[,c(2,5:14)]
+leakage_factors <- (landfills_factors %>% st_drop_geometry())[,c(2,6:14)]
 
 str(leakage_factors)
 
@@ -302,7 +302,7 @@ aggregate(leakage_factors_clean, by=list(cluster=km$cluster), mean)
 # add clusters to original data
 final_data <- cbind(leakage_factors_clean, cluster = km$cluster)
 
-#Enddaten anzeigen
+# Enddaten anzeigen
 head(final_data)
 
 
