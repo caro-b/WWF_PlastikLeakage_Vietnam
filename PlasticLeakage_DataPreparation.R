@@ -57,7 +57,7 @@ wind_meteostat <- read_csv(paste(dir, "/Meteostat_WindHourly.csv", sep = ""))
 
 #### 3. Water Areas (JRC Global Surface Water)
 ## downloaded via Google Earth Engine & processed in QGIS (faster & less memory)
-jrc_water <- raster(paste(dir, "/JRC_GlobalSurfaceWater_Vietnam_new_50:clipped.tif", sep = ""))
+jrc_water <- raster(paste(dir, "/JRC_GlobalSurfaceWater_Vietnam_new_50_clipped.tif", sep = ""))
 #jrc_water_perm <- raster(paste(dir, "/JRC_GlobalSurfaceWater_Vietnam_perm.tif", sep = ""))
 # reads proxy as actual raster to big
 #jrc_water_perm <- read_stars(paste(dir, "/JRC_GlobalSurfaceWater_Vietnam_perm.tif", sep = ""), NA_value = 0)
