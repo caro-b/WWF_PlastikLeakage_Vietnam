@@ -5,252 +5,19 @@
 ## Email: caroline.busse@stud-mail.uni-wuerzburg.de
 ##
 
-
-#### 0. SETUP ####
-
-# install required packages (if not installed yet)
-packagelist <- c("cartography","cluster","dplyr","factoextra","gdalUtils","ggmap","plyr","raster","reproducible","rgeos","rgdal","sf","sp","tidyverse")
-new.packages <- packagelist[!(packagelist %in% installed.packages()[,"Package"])]
-if(length(new.packages)) install.packages(new.packages)
-
-# load required packages
-lapply(packagelist, require, character.only = TRUE)
+library(psych)
+library(corrplot)
+library(ggplot2)
 
 
+#### I. Cluster Analysis ####
 
-#### I. Import landfill Locations ####
-## import landfill polygons
-landfills <- readOGR(paste(dir, "/OpenLandfills_Vietnam/OpenLandfills_Vietnam.shp", sep = ""), use_iconv = T, encoding = "UTF-8")
-plot(landfills)
-## access & plot first landfill
-plot(landfills[1,])
+## 0. Data Preparation
 
-## calculate centroids
-# first convert data to simple feature object (sf) (for easier operation & later plotting with ggplot)
-landfills_sf <- st_as_sf(landfills)
-
-# calculate centroids of landfills for calculating distance to nearest points/polygons
-landfills_sf_centroids <- st_centroid(landfills_sf)
-plot(landfills_sf$geometry)
-plot(landfills_sf_centroids$geometry, add = T)
-
-
-
-#### II. Plastic Leakage Factors ####
-
-#### 1. Climatic conditions (Precipitation (daily) & Wind Speed (hourly))
-## point data --> find nearest station
-climate_stations_sf <- st_as_sf(climate_stations)
-
-## save results in spatialdataframe
-landfills_factors <- landfills_sf_centroids
-# initiate columns with dummy variable
-landfills_factors$dist_station <- -1
-landfills_factors$rain <- -1
-landfills_factors$windspeed <- -1
-
-## function to find nearest climate station & save corresponding data
-nearest_climate_station <- function(landfills_factors) {
-  
-  ## calculate the distance matrix in meters using Great Circle distance (for lat/long data) from one landfill to all climate stations
-  dist_climate <- st_distance(landfills_factors[i,]$geometry, climate_stations_sf$geometry)
-  
-  ## calculate minimum distance
-  landfills_factors[i,]$dist_station <- min(dist_climate)
-  
-  ## find row associated to min distance
-  dist_min_climate <- (which(dist_climate == min(dist_climate), arr.ind=TRUE))[[1,2]]
-  
-  ## find associated climate station & save climate values to sf object
-  landfills_factors[i,]$rain <- climate_stations_sf[dist_min_climate,]$heavyraindays
-  landfills_factors[i,]$windspeed <- climate_stations_sf[dist_min_climate,]$heavywindhours
-  
-  return(landfills_factors)
-}
-
-## test if nearest point found
-# plot(landfills_sf_centroids$geometry)
-# plot(climate_stations_sf, add=T, col="blue")
-# plot(landfills_sf_centroids[1,]$geometry, add = T, col="green")
-# plot(climate_stations_sf[dist_min_climate,]$geometry, col="pink", add=T)#works
-
-
-
-#### 3. Water Areas (JRC) (& Flooding)
-## raster with values if there is data (else na) --> nearest & average value?
-
-# initiate columns with dummy variable
-landfills_factors$dist_water <- -1
-landfills_factors$dist_permwater <- -1
-# % of area flooded
-landfills_factors$flood_risk <- -1
-
-## function to find nearest water & save corresponding data
-nearest_water <- function(landfills_factors) {
-  
-  # get water in 1km buffer around landfill - then high risk
-  buffer <- buffer(landfills[i,], width = 0.005) # 1km = 0.005
-  # intersect to get water area in buffer
-  water_first <- intersect(jrc_water, buffer)
-  ## flood risk (% flooded)
-  landfills_factors[i,]$flood_risk <- sum(values(water_first), na.rm=T)/ length(values(water_first)) # na values counted as 0
-  
-  # get broader buffer for distances to water bodies
-  buffer_broad <- buffer(landfills[i,], width = 0.05)
-  water_first_broad <- intersect(jrc_water, buffer_broad)
-  # polygonize to calculate distance
-  water_vector <- rasterToPolygons(water_first_broad, fun = function(x){x>0}, na.rm = T, dissolve = T)
-  
-  ## calculate minimum distance to closest water
-  # account for no water in buffer
-  if(is.null(water_vector)) {
-    landfills_factors[i,]$dist_water <- NA
-    landfills_factors[i,]$dist_permwater <- NA
-  } else  { #if (!is.null(water_vector))
-    #water_dist <- (st_distance(st_as_sf(water_vector), landfills_sf_centroids[i,]))
-    landfills_factors[i,]$dist_water <- min(st_distance(st_as_sf(water_vector), landfills_sf_centroids[i,]))
-    
-    # calculate distance to closest permanent water (e.g. river)?? 
-    water_perm <- water_vector[water_vector$JRC_GlobalSurfaceWater_Vietnam_new_50 >=50,]
-    
-    # account for no permanent water
-    if (length(water_perm) != 0) {
-      landfills_factors[i,]$dist_permwater <- min(st_distance(st_as_sf(water_perm), landfills_sf_centroids[i,]))
-    } else {
-      landfills_factors[i,]$dist_permwater <- NA
-    }
-  }
-  return(landfills_factors)
-}
-
-## Distance to Ocean 
-
-# download coastline from naturalearth
-# coastline <- ne_download(scale = 10, type = 'coastline', category = 'physical')
-# coastline_vnm <- intersect(coastline, vietnam)
-#islands <- ne_download(scale = 10, type = 'minor_islands', category = 'physical')
-# coastline_islands <- readOGR(paste(dir, "/ne_10m_minor_islands_coastline/ne_10m_minor_islands_coastline.shp", sep = ""))
-# coastline_islands_vnm <- intersect(coastline_islands, vietnam)
-# plot(coastline_vnm)
-
-# download ocean from naturalearth
-ocean <- ne_download(scale = 10, type = 'ocean', category = 'physical')
-ocean_vnm <- intersect(ocean, vietnam)
-plot(ocean_vnm)
-
-landfills_factors$dist_ocean <- -1
-
-## function to find distance to ocean
-distance_ocean <- function(landfills_factors) {
-  
-  ## calculate the distance matrix in meters using Great Circle distance (for lat/long data)
-  dist_ocean <- st_distance(landfills_factors[i,]$geometry, st_as_sf(ocean_vnm))
-  
-  ## calculate minimum distance
-  landfills_factors[i,]$dist_ocean <- min(dist_ocean)
-  
-  return(landfills_factors)
-}
-
-
-
-#### 4. Natural Hazards (Flooding & Storm)
-#### (a) Flood Proneness)
-
-
-#### b) Storm Tracks
-
-# initiate columns with dummy variable
-landfills_factors$no_storms <- -1
-
-## function to find nearest water & save corresponding data
-find_storms <- function(landfills_factors) {
-  
-  # get water in 1km buffer around landfill - then high risk
-  buffer <- buffer(landfills[i,], width = 0.05) # 1km = 0.005
-  
-  # intersect to get storm tracks in buffer
-  storm <- st_intersection(storm_vnm, st_as_sf(buffer))
-  
-  # count number of storm tracks in buffer - higher risk
-  landfills_factors[i,]$no_storms <- nrow(storm)
-  
-  return(landfills_factors)
-}
-
-
-
-#### 5. Topography - DEM (Digital Elevation Model)
-
-landfills_factors$slope <- -1
-
-## function to get DEM slope values per landfill
-mean_slope <- function(landfills_factors) {
-  
-  slope_area <- intersect(slope, landfills[i,])
-  landfills_factors[i,]$slope <- mean(values(slope_area))
-  
-  return(landfills_factors)
-}
-
-
-
-#### 6. Waste Generation
-## polygon per province --> in which polygon landfill lies in
-waste_sf <- st_as_sf(waste)
-
-# convert CRS to get matching CRS
-landfills_sf <- st_transform(landfills_sf, crs(waste_sf))
-
-landfills_factors$waste <- -1
-
-waste_province <- function(landfills_factors) {
-  waste <- st_intersection(waste_sf, landfills_sf[i,], sparse=T)
-  if (nrow(waste) != 0) {
-    landfills_factors[i,]$waste <- waste$waste_t_y
-  } else {
-    landfills_factors[i,]$waste <- NA
-  }
-  return(landfills_factors)
-}
-
-
-
-## loop over landfills - take one landfill at once & find nearest climate station
-# index for loop
-i <- 1
-while (i <= length(landfills_factors$geometry)) {
-  # function to find nearest station & save climate attributes into sf object
-  landfills_factors <- nearest_climate_station(landfills_factors)
-  # function to find nearest water body
-  landfills_factors <- nearest_water(landfills_factors)
-  # function to count storms near landfill
-  landfills_factors <- find_storms(landfills_factors)
-  # function to get mean slope per landfill area
-  landfills_factors <- mean_slope(landfills_factors)
-  # function to test in which province landfill lies & save corresponding waste generation
-  landfills_factors <- waste_province(landfills_factors)
-  # distance to ocean
-  landfills_factors <- distance_ocean(landfills_factors)
-  ## increment i
-  i <- i+1
-}
-
-## download dataframe as CSV
-write.csv(landfills_factors, paste(dir, "/landfill_factors.csv", sep = ""), row.names = F)
-
-
-
-#### III. Cluster Analysis ####
-
-## Data Preparation
 # convert to standard dataframe & only keep plastic leakage factors
-leakage_factors <- (landfills_factors %>% st_drop_geometry())[,c(2,6:14)]
+leakage_factors <- (landfills_factors %>% st_drop_geometry())[,c(5,7:15)]
 
 str(leakage_factors)
-
-# change character to double
-leakage_factors$area <- as.double(leakage_factors$area)
 
 # change character to integer values
 from <- c("10-30.000","30-50.000","50-70.000","70-200.000","200-300.000","300-2.500.000")
@@ -264,48 +31,132 @@ pairs(leakage_factors)
 ## remove rows with NA data
 leakage_factors_clean <- na.omit(leakage_factors)
 
+# data must be numeric (K-means does not work with categorical data)
+## remove categorical data
+leakage_factors_km <- leakage_factors_clean[,c(1:9)]
+
 ## Normalize Data
 # to mean= 0 & standard deviaion = 1
-leakage_factors_norm <- scale(leakage_factors_clean)
+leakage_factors_norm <- scale(leakage_factors_km)
 
 head(leakage_factors_norm)
+hist(leakage_factors_norm)
 
 
-#### K-means Clustering (Unsupervised Machine Learning)
 
-## first find optimal numbers of clusters
+#### I. Factor Analysis ####
+
+describe(leakage_factors_clean)
+dim(leakage_factors_clean)
+
+## correlation matrix
+datamatrix <- cor(leakage_factors_norm)
+corrplot(datamatrix, method="number")
+
+X <- leakage_factors_norm
+
+KMO(r=cor(X)) # data not factorable?
+
+cortest.bartlett(X) # significance level < 0.05 indicates factor analysis might be useful
+
+## parallel analysis
+parallel <- fa.parallel(X)
+
+fa.none <- fa(r=X, 
+              nfactors = 2, 
+              # covar = FALSE, SMC = TRUE,
+              fm="pa", # type of factor analysis we want to use (“pa” is principal axis factoring)
+              max.iter=100, # (50 is the default, but we have changed it to 100
+              rotate="varimax") # none rotation
+print(fa.none)
+
+## graph factor loadings
+fa.diagram(fa.none)
+
+
+
+#### II. K-means Clustering (Unsupervised Machine Learning)
+
+#### Clustering via distance measure
+# similar objects are close to one another
+distance <- get_dist(leakage_factors_norm)
+fviz_dist(distance, gradient = list(low = "#00AFBB", mid = "white", high = "#FC4E07"))
+
+
+#### K-means Clustering
+
+## first find optimal numbers of clusters (elbow method)
+# minimize total intra-cluster variation
 fviz_nbclust(leakage_factors_norm, kmeans, method = "wss")
 
-# Berechnen Sie die Lückenstatistik basierend auf der Anzahl der Cluster
+## Silhouette Method
+# how well each object lies within its cluster
+fviz_nbclust(leakage_factors_norm, kmeans, method = "silhouette")
+
+# gap statistic
 gap_stat <- clusGap(leakage_factors_norm,
                     FUN = kmeans,
+                    K.max = 9,
                     nstart = 25,
-                    K.max = 10,
                     B = 50)
 
 # Plotten der Anzahl der Cluster vs. Lückenstatistik
 fviz_gap_stat(gap_stat)
 
+best <- FitKMeans(leakage_factors_norm, max.clusters=9, nstart=25, seed=123) > best
+
 
 # set seed to make clustering reproducible
 set.seed(123)
-km <- kmeans(leakage_factors_norm, 3, nstart = 25) # 3 clusters (low, medium & high risk)
+km <- kmeans(leakage_factors_norm, centers = 3, nstart=25) # 3 clusters (low, medium & high risk), random starting condition
+
+km 
 
 # plot clustering results
 fviz_cluster(km, data = leakage_factors_norm)
 
 
 # mean factor values per Cluster
-aggregate(leakage_factors_clean, by=list(cluster=km$cluster), mean)
+aggregate(leakage_factors_km, by=list(cluster=norm$cluster), mean)
 
 
 # add clusters to original data
-final_data <- cbind(leakage_factors_clean, cluster = km$cluster)
+final_data <- cbind(leakage_factors_km, cluster = km$cluster)
 
 # Enddaten anzeigen
 head(final_data)
 
 
 
+#### III. Herarchical Clustering
+
+# Compute dissimilarity matrix
+res.dist <- dist(leakage_factors_norm, method = "euclidean")
+
+# Compute hierarchical clustering
+res.hc <- hclust(res.dist, method = "ward.D2")
+
+# Visualize
+plot(res.hc, cex = 0.5)
+
+fviz_dend(res.hc, k = 4, # Cut in four groups
+          cex = 0.5, # label size
+          k_colors = c("#2E9FDF", "#00AFBB", "#E7B800", "#FC4E07"),
+          color_labels_by_k = TRUE, # color labels by groups
+          rect = TRUE # Add rectangle around groups
+          gith)
+
+
+
+#### Enhanced hierarchical clustering
+res.ec <- eclust(leakage_factors_norm, "hclust", k = 3) # compute hclust
+
+## Dendogram
+fviz_dend(res.ec, rect = TRUE) # Add rectangle around groups
+fviz_cluster(res.ec)
+
+
 #### TODO: function: create risk per landfill ####
+
+
 
