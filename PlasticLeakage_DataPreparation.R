@@ -173,7 +173,7 @@ plot(vietnam, add=T)
 
 
 #### 6. Waste Generation
-waste <- readOGR(paste(dir, "/gadm36_VNM_1_wasterperprovince_2003_UTM48N.shp", sep = ""), use_iconv = TRUE, encoding = "UTF-8")
+waste <- readOGR(paste(dir, "/gadm36_VNM_1_wasteperprovince_20032019_UTM48N.shp", sep = ""), use_iconv = TRUE, encoding = "UTF-8")
 
 
 
@@ -249,10 +249,10 @@ plot(vietnam, add =T)
 
 #### 6. Waste Generation
 ## remove not needed columns
-waste <- waste[,names(waste) %in% c("VARNAME_1","ENGTYPE_1","waste.t.y.")]
+waste <- waste[,names(waste) %in% c("VARNAME_1","ENGTYPE_1","waste.t.y.","leakage...")]
 
 ## rename columns
-names(waste) <- c("location","type","waste_t_y")
+names(waste) <- c("location","type","waste_t_y","leakage_perc")
 
 
 
