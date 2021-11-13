@@ -16,9 +16,9 @@ if(length(new.packages)) install.packages(new.packages)
 # load required packages
 lapply(packagelist, require, character.only = TRUE)
 
-library(psych)
-library(corrplot)
-library(ggplot2)
+# set folder 'data' as directory from which to import data
+dir <- 'D:/Documents/WWF_PlastikLeakage_Vietnam/data'
+
 
 
 #### I. Import landfill Locations ####
@@ -28,7 +28,7 @@ plot(landfills)
 ## access & plot first landfill
 plot(landfills[1,])
 
-## calulcate landfill area in ha (from meters) (polygon area)
+## calculcate landfill area in ha (from meters) (polygon area)
 landfills$area_ha <- area(landfills)/10000
 
 ## calculate centroids
@@ -202,7 +202,7 @@ mean_slope <- function(landfills_factors) {
 
 
 
-#### 6. Waste Generation
+#### 6. Waste Generation & Leakage
 ## polygon per province --> in which polygon landfill lies in
 waste_sf <- st_as_sf(waste)
 
@@ -210,13 +210,17 @@ waste_sf <- st_as_sf(waste)
 landfills_sf <- st_transform(landfills_sf, crs(waste_sf))
 
 landfills_factors$waste <- -1
+landfills_factors$leakage <- -1
 
+## function that finds province in which landfill lies & saves corresponding waste data
 waste_province <- function(landfills_factors) {
   waste <- st_intersection(waste_sf, landfills_sf[i,], sparse=T)
   if (nrow(waste) != 0) {
     landfills_factors[i,]$waste <- waste$waste_t_y
+    landfills_factors[i,]$leakage <- waste$leakage_perc
   } else {
     landfills_factors[i,]$waste <- NA
+    landfills_factors[i,]$leakage <- NA
   }
   return(landfills_factors)
 }
@@ -243,6 +247,11 @@ while (i <= length(landfills_factors$geometry)) {
   i <- i+1
 }
 
+
+
+
+
 ## download dataframe as CSV
-write.csv(landfills_factors, paste(dir, "/landfill_factors.csv", sep = ""), row.names = F)
+filename <- paste(dir,"/landfill_variables.csv", sep= "")
+write.table(landfills_factors, file = filename, row.names = F, fileEncoding = "UTF-8", sep = ";")
 
