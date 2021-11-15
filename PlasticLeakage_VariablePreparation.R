@@ -9,7 +9,7 @@
 #### 0. SETUP ####
 
 # install required packages (if not installed yet)
-packagelist <- c("cartography","cluster","dplyr","factoextra","gdalUtils","ggmap","plyr","raster","reproducible","rgeos","rgdal","sf","sp","spatialEco","tidyverse")
+packagelist <- c("cartography","dplyr","gdalUtils","ggmap","plyr","raster","reproducible","rgeos","rgdal","sf","sp","spatialEco","tidyverse")
 new.packages <- packagelist[!(packagelist %in% installed.packages()[,"Package"])]
 if(length(new.packages)) install.packages(new.packages)
 
@@ -94,11 +94,8 @@ landfills_factors$flood_risk <- -1
 ## function to find nearest water & save corresponding data
 nearest_water <- function(landfills_factors) {
   
-  # get water in 1km buffer around landfill - then high flooding risk
-  buffer <- st_buffer(landfills_sf_centroids[i,], dist = 1000) # dist in meters
-  
   # intersect to get water area in buffer
-  water <- intersect(jrc_water, buffer)
+  water <- intersect(jrc_water, landfills_sf[i,])
   ## flood risk (% flooded)
   landfills_factors[i,]$flood_risk <- sum(values(water), na.rm=T)/ length(values(water)) # na values counted as 0
   
@@ -130,15 +127,8 @@ nearest_water <- function(landfills_factors) {
   return(landfills_factors)
 }
 
-## Distance to Ocean 
 
-# download coastline from naturalearth
-# coastline <- ne_download(scale = 10, type = 'coastline', category = 'physical')
-# coastline_vnm <- intersect(coastline, vietnam)
-#islands <- ne_download(scale = 10, type = 'minor_islands', category = 'physical')
-# coastline_islands <- readOGR(paste(dir, "/ne_10m_minor_islands_coastline/ne_10m_minor_islands_coastline.shp", sep = ""))
-# coastline_islands_vnm <- intersect(coastline_islands, vietnam)
-# plot(coastline_vnm)
+## Distance to Ocean 
 
 # download ocean from naturalearth
 ocean <- ne_download(scale = 10, type = 'ocean', category = 'physical')
