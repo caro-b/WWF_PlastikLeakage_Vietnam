@@ -102,7 +102,6 @@ jrc_water <- raster(paste(dir, "/JRC_GlobalSurfaceWater_Vietnam_new_50_clipped.t
 # 
 
 
-
 #jrc_water[jrc_water < 0] <- NULL
 
 #perm <- jrc_water_perm[1]
