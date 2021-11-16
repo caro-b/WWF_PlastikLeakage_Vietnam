@@ -9,7 +9,7 @@
 #### 0. SETUP ####
 
 # install required packages (if not installed yet)
-packagelist <- c("corrplot","cluster","DataExplorer","dbscan","dplyr","factoextra","fpc","ggplot","psych","readr","sf","sp","tidyverse")
+packagelist <- c("corrplot","clValid","cluster","DataExplorer","dbscan","dplyr","factoextra","fpc","ggplot2","parameters","psych","readr","sf","sp","tidyverse")
 new.packages <- packagelist[!(packagelist %in% installed.packages()[,"Package"])]
 if(length(new.packages)) install.packages(new.packages)
 
@@ -27,9 +27,6 @@ landfills_factors <- read.csv(filename, sep= ";")
 
 
 #### I. Data Preparation
-
-#### TODO: assign high, medium & low risk to landfills ####
-## -> to account for different loadings/directions of variables (e.g. low distances to ocean - high risk, but low rain = low risk)
 
 ## take smallest water distance
 landfills_factors$watermin <- with(landfills_factors, 
@@ -57,9 +54,6 @@ leakage_factors <- landfills_factors[,c(5,8:18)]
 ## remove dependent variable (leakage)
 leakage_factors_indep <- leakage_factors[,-11]
 
-## main variables
-leakage_factors_main <- leakage_factors_indep[,c(2:3,6,9,11)]
-
 
 ## download dataframe as CSV
 filename <- paste(dir,"/landfill_variables.csv", sep= "")
@@ -69,56 +63,109 @@ write.table(landfills_factors, file = filename, row.names = F, fileEncoding = "U
 
 #### II. Exploratory Data Analysis ####
 
-## Density Plot
-leakage_factors %>% plot_density()
-## rain has different distribution
+#### Outlier Analysis
 
 ## Histogram
-leakage_factors %>% plot_histogram()
+leakage_factors_indep %>% plot_histogram()
+
+## Boxplots
+boxplot(leakage_factors_indep)
+
+par(mfrow=c(2,6))
+boxplot(leakage_factors_indep$area_ha)
+boxplot(leakage_factors_indep$rain)
+boxplot(leakage_factors_indep$windspeed)
+boxplot(leakage_factors_indep$dist_water)
+boxplot(leakage_factors_indep$dist_permwater)
+boxplot(leakage_factors_indep$flood_risk)
+boxplot(leakage_factors_indep$dist_ocean)
+boxplot(leakage_factors_indep$no_storms)
+boxplot(leakage_factors_indep$slope)
+boxplot(leakage_factors_indep$waste)
+boxplot(leakage_factors_indep$watermin)
+
+## extract outliers
+out <- boxplot.stats(leakage_factors_indep$area_ha)$out
+# find corresponding row
+out_ind <- which(eakage_factors_indep %in% c(out))
+
+
+## Density Plot
+leakage_factors_indep %>% plot_density()
+## rain has different distribution
 
 ## Scatter Plots of all possible factor combinations
 pairs(leakage_factors)
 
-## Correlation Matrix
+pairs.panels(leakage_factors_indep[-c(4,5,7)],
+             gap = 0,
+             pch=21)
+# similar distributions of variables --> many landfills with low values, few with high values
+
+
+#### Correlation Matrix
+
+leakage_factors_indep %>% plot_correlation() 
+## positive correlation: high correlation between watermin & dist_water, waste & area
+## negative correlation: rel. high between waste & rain, waste & distance water
+# --> multicollinearity issues
+
+## drop single water distances
+leakage_factors_indep[-c(4,5,7)] %>% plot_correlation() 
+
+## drop waste
+leakage_factors_indep[-c(4,5,7,10)] %>% plot_correlation() 
 
 ## main variables
-# dropping waste as higher correlation
-leakage_factors_indep[,c(1:3,6,9,11)] %>% plot_correlation() 
-## positive correlation: high correlation between waste & area, rel. high between rain & no. storms
-## negative correlation: rel. high between waste & rain, waste & distance water
-
-## Boxplots
-boxplot(leakage_factors_main)
-
-par(mfrow=c(1,6))
-boxplot(leakage_factors_main[,1])
-boxplot(leakage_factors_main[,2])
-boxplot(leakage_factors_main[,3])
-boxplot(leakage_factors_main[,4])
-boxplot(leakage_factors_main[,5])
-boxplot(leakage_factors_main[,6])
+# drop waste as higher correlation & drop single water distances
+leakage_factors_main <- leakage_factors_indep[-c(4,5,7,10)]
 
 
 
 #### III. Factor Analysis ####
+## alternative to manual assessment  of correlation matrix (sufficient as background knowledge)
 
 describe(leakage_factors_indep)
 X <- leakage_factors_indep
+X2 <- leakage_factors_indep[-c(4,5,7)]# only include watermin
+X3 <- leakage_factors_indep[-11]# drop watermin
+X4 <- leakage_factors_main # pre-defined variable set (from correlation matrix)
 
-KMO(r=cor(X)) # data not factorable?
+# KMO test to measure of how suited your data is for Factor Analysis
+KMO(r=cor(X)) # items with KMO < 0.5 should be dropped
+KMO(r=cor(X2)) # 0.64 - factor analysis could make sense (must be > 0.6)
+KMO(r=cor(X3)) # 0.46
+KMO(r=cor(X4)) # 0.54
 
-cortest.bartlett(X) # significance level < 0.05 indicates factor analysis might be useful
+cortest.bartlett(X3) # significance level < 0.05 indicates factor analysis might be useful
+cortest.bartlett(X4) # doesn't make sense to do factor analysis
 
-## parallel analysis
-parallel <- fa.parallel(X) # 2 factors
+#### Principal Component Analysis
 
-fa.none <- fa(r=X, 
-              nfactors = 4, 
-              # covar = FALSE, SMC = TRUE,
+## Number of Components
+parallel <- fa.parallel(X4) # 2 factors & 1 component
+
+pc.1 <- principal(X4, rotate='none', nfactors=2) 
+pc.2 <- principal(X4, rotate='none', nfactors=ncol(X4))
+pc.3 <- principal(X4, rotate='none', nfactors=3) # PCA with pre-defined variable set (from correlation matrix)
+
+print(loadings(pc.1), cutoff= .55) # only 0.515% of variance explained
+print(loadings(pc.2), cutoff= .55) 
+print(loadings(pc.3), cutoff= .55) # 0.687% of variance explained
+
+# rotate factors
+pc.3.r <- principal(X4, nfactors=3, rotate='varimax') # water & flood should have opposed sign
+print(loadings(pc.3.r), cutoff= .55)
+
+fa.diagram(pc.3, simple=TRUE, cut=.55, digits=2)
+
+
+#### Factor Analysis
+fa.none <- fa(r=X4, nfactors = 3, 
               fm="pa", # type of factor analysis we want to use (“pa” is principal axis factoring)
               max.iter=100, # (50 is the default, but we have changed it to 100
-              rotate="varimax") # none rotation
-print(fa.none)
+              rotate="varimax")
+print(fa.none, cut = .4)
 
 ## graph factor loadings
 fa.diagram(fa.none)
@@ -126,132 +173,231 @@ fa.diagram(fa.none)
 
 
 #### IV. Cluster Analysis ####
+## Unsupervised Machine Learning -- needs sufficient sample size --> more landfill data needed
 
 #### 0) Normalize
 
-## remove categorical data
-# data must be numeric (K-means does not work with categorical data)
 leakage_factors_km <- leakage_factors_main
 
-
-## Normalize Data to mean= 0 & standard deviation = 1
+## Normalize Data to account for different scales 
+# mean = 0 & standard deviation = 1
 leakage_factors_norm <- scale(leakage_factors_km)
 
 head(leakage_factors_norm)
 hist(leakage_factors_norm)
 
 
+#### TODO: z-Transformation before clustering as variables have very different scales ####
+#### TODO: account for extreme values which distort the results ####
+
+#### TODO: reduce collinearity between variables which distort results ####
+# drop no. storms
+leakage_factors_norm2 <- scale(leakage_factors_km[-5])
+
+# drop area
+leakage_factors_norm3 <- scale(leakage_factors_km[-c(1,5)])
+
+
 
 #### a) Distance Measures
 
 # similar objects are close to one another
-distance <- get_dist(leakage_factors_indep, "euclidean")
+distance <- get_dist(leakage_factors_km, "euclidean")
 fviz_dist(distance, gradient = list(low = "#00AFBB", mid = "white", high = "#FC4E07"))
 
 
 
 #### b) K-Means Clustering
 
-## Unsupervised - no response variable
+# partitions observations into k clusters in which each observation belongs to the cluster with the closest average
 
-## first find optimal numbers of clusters (elbow method)
+#### TODO: define proximity measure ####
+## rather use similarity measure than distance measure as similar density plots ???
+
+
+#### Optimal Number of Clusters
+
+## 1. Elbow method
+
 # minimize total intra-cluster variation
-fviz_nbclust(leakage_factors_norm, kmeans, method = "wss")
+fviz_nbclust(leakage_factors_km, kmeans, method = "wss") # 7 clusters, unstandardized: 3
 
-## Silhouette Method
+
+## 2. Silhouette Method
 # how well each object lies within its cluster
-fviz_nbclust(leakage_factors_norm, kmeans, method = "silhouette")
-# 3 (water aggregated to watermin, dropping nothing)
+fviz_nbclust(leakage_factors_norm, kmeans, method = "silhouette") # 9 clusters, unstandardized: 3
 
 
-# gap statistic
+## 3. Gap statistic
 gap_stat <- clusGap(leakage_factors_norm,
                     FUN = kmeans,
-                    K.max = 9,
+                    K.max = ncol(leakage_factors_norm),
                     nstart = 25,
                     B = 50)
 
 # Plotten der Anzahl der Cluster vs. Lückenstatistik
-fviz_gap_stat(gap_stat)
+fviz_gap_stat(gap_stat) # 1 cluster, unstandardized: 3
 
+
+## 4. Consensus-based
+n_clusters(leakage_factors_km, package = "all", standardize = T) # 6 clusters, unstandardized: 3
+
+
+#### K-means Clustering
 
 # set seed to make clustering reproducible
 set.seed(123)
-km <- kmeans(leakage_factors_norm, centers = 3, nstart=25) # 3 clusters (low, medium & high risk), random starting condition
-
+km <- kmeans(leakage_factors_norm, centers = 3, nstart = 25) # 3 clusters (low, medium & high risk), random starting condition
 km 
 
+set.seed(111)
+km2 <- kmeans(leakage_factors_norm, centers = 4, nstart = 25) 
+km2
+
+set.seed(155)
+km3 <- kmeans(leakage_factors_norm, centers = 5, nstart = 25) 
+km3
+
+## storms dropped (as rel. high collinearity)
+set.seed(133)
+km4 <- kmeans(leakage_factors_norm2, centers = 3, nstart = 25)
+km4
+
+## storms & area dropped
+set.seed(177)
+km5 <- kmeans(leakage_factors_norm3, centers = 3, nstart = 25)
+km5
+
+## un-standardized data
+set.seed(99)
+km6 <- kmeans(leakage_factors_km, centers = 3, nstart = 25) # 3 clusters (low, medium & high risk), random starting condition
+km6
+
+
+#### TODO: clustering with only numeric (not categorical data)####
+
+## Quality of k-means clustering
+# Between Sum of Squares divided by Total Sum of Squares
+## 3 cluster
+km$betweenss / km$totss * 100 # 37,3%
+km4$betweenss / km4$totss * 100 # 42,1% 
+km5$betweenss / km5$totss * 100 # 44,5% 
+km6$betweenss / km6$totss * 100 # 93,4% 
+
+km2$betweenss / km2$totss * 100 # 51,12%
+km3$betweenss / km3$totss * 100 # 63,24% 
+
+
 # plot clustering results
-fviz_cluster(km, data = leakage_factors_norm)
+fviz_cluster(km6, data = leakage_factors_km, stand = F)
 
-
-# mean variable values per Cluster
-aggregate(leakage_factors_km, by=list(cluster=km$cluster), mean)
-
+# mean variable values per cluster
+aggregate(leakage_factors_km, by=list(cluster=km6$cluster), mean)
 
 # add clusters to original data
-leakage_factors_main <- cbind(leakage_factors_main, km_cluster = km$cluster)
-# cluster2: dropping waste & storms
-
-head(leakage_factors_main)
+leakage_factors_main <- cbind(leakage_factors_main, km_cluster_unstand = km6$cluster)
+leakage_factors_main <- cbind(leakage_factors_main, km_cluster_stand = km$cluster)
 
 
-#### TODO: try clustering with only numeric (not categorical data) ####
+## downsides of K-means
+# an object with an extremely large value may substantially distort the distribution of objects in clusters/groups
+# e.g. watermin (range from 0 to 2014, standard deviation ~ 592)
 
 
 
-#### c) Herarchical Clustering
+#### TODO: k-mediod clustering - PAM ####
+## more robust to noise (e.g. outliers)
+# kmeans uses centroid (average of all oints), kmediods uses mediod (most centrally located object or minimal average dissimilarity to all objects)
+# PAM (Partitioning around medoids) most robust
 
-# Compute dissimilarity matrix
-res.dist <- dist(leakage_factors_norm, method = "euclidean")
+pam <- pam(leakage_factors_km, 3, metric = "euclidean", stand = F, medoids = "random", nstart = 25)
+pam
 
-# Compute hierarchical clustering
-res.hc <- hclust(res.dist, method = "ward.D2")
+fviz_cluster(pam, data = leakage_factors_km, stand = F)
 
-# Visualize
-plot(res.hc, cex = 0.5)
+# cluster mediods
+pam$id.med
+pam$medoids
 
-fviz_dend(res.hc, k = 3, # Cut in four groups
-          cex = 0.5, # label size
-          k_colors = c("#2E9FDF", "#00AFBB", "#E7B800", "#FC4E07"),
-          color_labels_by_k = TRUE, # color labels by groups
-          rect = TRUE # Add rectangle around groups
+leakage_factors_main <- cbind(leakage_factors_main, pam_unstand = pam$cluster)
+
+
+
+
+#### c) Hierarchical Clustering
+
+# Compute the dissimilarity matrix
+hc_dist <- dist(leakage_factors_km, method = "euclidean")
+
+## singlw linkage
+# uses maximum distance between observations
+hc_single <- eclust(leakage_factors_km, "hclust", k = 3, hc_method = "single", graph = F)
+plot(hc_single)
+
+## complete linkage
+# uses maximum distance between observations
+hc_complete <- eclust(leakage_factors_km, "hclust", k = 3, hc_method = "complete", graph = F)
+hc_complete <- hclust(hc_dist, method = "complete")
+plot(hc_complete) # 3 cluster
+rect.hclust(hc_complete,
+            k = 3, # k is used to specify the number of clusters
+            border = "green")
+cutree(hc_complete, k = 3)
+
+
+## average linkage
+# average distance
+hc_average <- eclust(leakage_factors_km, "hclust", k = 3, hc_method = "average", graph = F)
+hc_average <- hclust(hc_dist, method = "average")
+plot(hc_average)
+rect.hclust(hc_average,
+            k = 3, # number of clusters
+            border = "green")
+cutree(hc_average, k = 3)
+
+
+## centroid
+hc_centroid <- eclust(leakage_factors_km, "hclust", k = 3, hc_method = "centroid", graph = F)
+hc_centroid <- hclust(hc_dist, method = "centroid")
+plot(hc_centroid) # 3 clusters
+cutree(hc_centroid, k = 3)
+
+
+## Ward D
+hc_ward <- eclust(leakage_factors_km, "hclust", k = 3, hc_method = "ward.D", graph = F)
+fviz_dend(hc_ward, k = 3, 
+          k_colors = c("blue", "green", "orange"),
+          rect = T # Add rectangle around groups
 )
 
+## Silhouette Method
+# average distance between clusters - optimla value near 1
+# find best hierarchical clustering approach
+fviz_silhouette(hc_single) # 0.86 for 2 clusters
+fviz_silhouette(hc_complete) # 0.8 for 2 clusters, 0.7 for 3 clusters
+fviz_silhouette(hc_average) # 0.8 for 2 clusters
+fviz_silhouette(hc_centroid) # 0.77 for 2 clusters
+fviz_silhouette(hc_ward) # 0.77 for 2 clusters
 
 
-#### d) Enhanced Hierarchical Clustering
-res.ec <- eclust(leakage_factors_norm, "hclust", k = 3) # compute hclust
+aggregate(leakage_factors_km, by=list(cluster=hc_complete$cluster), mean)
 
-## Dendogram
-fviz_dend(res.ec, rect = TRUE) # Add rectangle around groups
-fviz_cluster(res.ec)
-
-fviz_cluster(res.ec, data = leakage_factors_norm)
-
-aggregate(leakage_factors_km, by=list(cluster=res.ec$cluster), mean)
-
-leakage_factors_main <- cbind(leakage_factors_main, ec_cluster = res.ec$cluster)
-
+leakage_factors_main <- cbind(leakage_factors_main, ec_cluster_unstand = hc_complete$cluster)
 
 
 
-#### e) Fuzzy Clustering
+#### d) Fuzzy Clustering
 fc <- fanny(leakage_factors_km, 3, metric = "euclidean")
 
-# low value of Dunn’s coefficient indicates a very fuzzy clustering, a value close to 1 indicates a near-crisp clustering
-fc$coeff
+# Dunn index - low value indicates fuzzy clustering, value close to 1 indicates a near-crisp clustering
+fc$coeff # 0.65
 
-fviz_cluster(fc, repel = TRUE,
-             palette = "jco", ggtheme = theme_minimal(),
-             legend = "right")
-
-fviz_silhouette(fc, palette = "jco",
-                ggtheme = theme_minimal())
+fviz_cluster(fc, repel = T, palette = "jco", ggtheme = theme_minimal(), legend = "right")
+fviz_silhouette(fc, palette = "jco", ggtheme = theme_minimal()) # 0.74 for 3 clusters
 
 
 
-#### f) Density-Based Clustering 
+#### e) Density-Based Clustering 
 ## as kmeans & hierarchical clustering severely affected by noise and outliers in data
 
 # find optimum eps value
@@ -269,7 +415,29 @@ fviz_cluster(db, data = leakage_factors_norm, stand = FALSE,
 
 
 
-#### Risk Assessment ####
+#### Cluster Validation
+
+## 1. Internal Validation
+
+## assess cluster Connectivity, Dunn Index & Silhouette Width
+# Connectivity: degree of connectedness of the cluster - should be minimzed (0)
+# Silhouette: how similar an object is to other objects in its own cluster versus those in the neighbor cluster - interval [-1,1], well-clustered near 1 and poorly clustered near -1
+# Dunn: ratio of smallest distance between observations not in the same cluster to the largest intra-cluster distance - should be maximized (infinity)
+intern <- clValid(leakage_factors_km, 2:4, clMethods=c("hierarchical","kmeans","pam"),
+                  validation="internal")
+summary(intern)
+optimalScores(intern) # kmeans returns optimal clusters, PAM has similar results
+plot(intern)
+
+
+## 2. External Validation
+
+#### TODO: compare clusters with manual risk assessment ####
+
+
+
+
+#### Manual Risk Assessment ####
 
 describe(leakage_factors_main)
 
@@ -347,6 +515,7 @@ while (i <= nrow(leakage_factors_main)) {
   ## increment i
   i <- i+1
 }
+
 
 ## add low, medium or high risk to risk value
 leakage_factors_main$risk_label <- "medium"
