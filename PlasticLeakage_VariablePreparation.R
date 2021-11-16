@@ -23,7 +23,7 @@ dir <- 'D:/Documents/WWF_PlastikLeakage_Vietnam/data'
 
 #### I. Import landfill Locations ####
 ## import landfill polygons
-landfills <- readOGR(paste(dir, "/OpenLandfills_Vietnam/OpenLandfills_Vietnam.shp", sep = ""), use_iconv = T, encoding = "UTF-8")
+landfills <- readOGR(paste(dir, "/OpenLandfills_Vietnam/OpenLandfills_Vietnam_all.shp", sep = ""), use_iconv = T, encoding = "UTF-8")
 plot(landfills)
 ## access & plot first landfill
 plot(landfills[1,])
@@ -91,11 +91,16 @@ landfills_factors$dist_permwater <- -1
 # % of area flooded
 landfills_factors$flood_risk <- -1
 
+# convert CRS to get matching CRS
+landfills_sf <- st_transform(landfills_sf, crs(jrc_water))
+
 ## function to find nearest water & save corresponding data
 nearest_water <- function(landfills_factors) {
   
+  # 100m buffer around landfill to get flooding risk
+  buffer <- st_buffer(landfills_sf[i,], dist = 100) # 100m
   # intersect to get water area in buffer
-  water <- intersect(jrc_water, landfills_sf[i,])
+  water <- intersect(jrc_water, buffer)
   ## flood risk (% flooded)
   landfills_factors[i,]$flood_risk <- sum(values(water), na.rm=T)/ length(values(water)) # na values counted as 0
   
@@ -221,7 +226,7 @@ waste_province <- function(landfills_factors) {
 # index for loop
 i <- 1
 while (i <= length(landfills_factors$geometry)) {
-  # function to find nearest station & save climate attributes into sf object
+  #function to find nearest station & save climate attributes into sf object
   landfills_factors <- nearest_climate_station(landfills_factors)
   # function to find nearest water body
   landfills_factors <- nearest_water(landfills_factors)
@@ -233,11 +238,9 @@ while (i <= length(landfills_factors$geometry)) {
   landfills_factors <- waste_province(landfills_factors)
   # distance to ocean
   landfills_factors <- distance_ocean(landfills_factors)
-  ## increment i
+  # increment i
   i <- i+1
 }
-
-
 
 
 
