@@ -33,7 +33,8 @@ landfills$area_ha <- area(landfills)/10000
 
 ## calculate centroids
 # first convert data to simple feature object (sf) (for easier operation & later plotting with ggplot)
-landfills_sf <- st_as_sf(landfills)
+# convert CRS to get matching CRS
+landfills_sf <- st_as_sf(landfills, crs(jrc_water))
 
 # calculate centroids of landfills for calculating distance to nearest points/polygons
 landfills_sf_centroids <- st_centroid(landfills_sf)
@@ -90,9 +91,6 @@ landfills_factors$dist_water <- -1
 landfills_factors$dist_permwater <- -1
 # % of area flooded
 landfills_factors$flood_risk <- -1
-
-# convert CRS to get matching CRS
-landfills_sf <- st_transform(landfills_sf, crs(jrc_water))
 
 ## function to find nearest water & save corresponding data
 nearest_water <- function(landfills_factors) {
@@ -202,14 +200,14 @@ mean_slope <- function(landfills_factors) {
 waste_sf <- st_as_sf(waste)
 
 # convert CRS to get matching CRS
-landfills_sf <- st_transform(landfills_sf, crs(waste_sf))
+landfills_sf_utm48 <- st_transform(landfills_sf, crs(waste_sf))
 
 landfills_factors$waste <- -1
 landfills_factors$leakage <- -1
 
 ## function that finds province in which landfill lies & saves corresponding waste data
 waste_province <- function(landfills_factors) {
-  waste <- st_intersection(waste_sf, landfills_sf[i,], sparse=T)
+  waste <- st_intersection(waste_sf, landfills_sf_utm48[i,], sparse=T)
   if (nrow(waste) != 0) {
     landfills_factors[i,]$waste <- waste$waste_t_y
     landfills_factors[i,]$leakage <- waste$leakage_perc
@@ -219,6 +217,12 @@ waste_province <- function(landfills_factors) {
   }
   return(landfills_factors)
 }
+
+## account for NA values
+landfills_factors[is.na(landfills_factors$waste),]
+
+## Con Do belongs to Bà Rịa–Vũng Tàu province (=70-200.000 waste)
+landfills_factors$waste[is.na(landfills_factors$waste)] <- "70-200.000"
 
 
 
@@ -243,8 +247,9 @@ while (i <= length(landfills_factors$geometry)) {
 }
 
 
-
-## download dataframe as CSV
+## save dataframe as CSV
 filename <- paste(dir,"/landfill_variables.csv", sep= "")
 write.table(landfills_factors, file = filename, row.names = F, fileEncoding = "UTF-8", sep = ";")
 
+## save as shapefile
+st_write(landfills_factors, paste(dir,"/landfill_variables.gpkg", sep= ""), overwrite=T)
