@@ -9,7 +9,7 @@
 #### 0. SETUP ####
 
 # install required packages (if not installed yet)
-packagelist <- c("corrplot","clValid","cluster","DataExplorer","dbscan","dplyr","factoextra","fpc","ggplot2","parameters","psych","readr","sf","sp","tidyverse")
+packagelist <- c("corrplot","clValid","cluster","DataExplorer","dbscan","dplyr","factoextra","fpc","ggplot2","parameters","psych","readr","rgdal","sf","sp","tidyverse")
 new.packages <- packagelist[!(packagelist %in% installed.packages()[,"Package"])]
 if(length(new.packages)) install.packages(new.packages)
 
@@ -20,48 +20,47 @@ lapply(packagelist, require, character.only = TRUE)
 dir <- 'D:/Documents/WWF_PlastikLeakage_Vietnam/data'
 
 
+## import shapefile of vietnam
+vietnam <- readOGR(paste(dir, "/vietnam/vietnam_new.shp", sep = ""))
+
 ## import dataframe as CSV
-filename <- paste(dir,"/landfill_variables.csv", sep= "")
-landfills_factors <- read.csv(filename, sep= ";")
+# filename <- paste(dir,"/landfill_variables.csv", sep= "")
+# landfills_factors <- read.csv(filename, sep= ";")
+
+## import landfill polygons
+landfills <- readOGR(paste(dir, "/landfill_variables.gpkg", sep = ""))
 
 
 
 #### I. Data Preparation
 
 ## take smallest water distance
-landfills_factors$watermin <- with(landfills_factors, 
+landfills$watermin <- with(landfills_factors, 
                                    pmin(landfills_factors$dist_water, landfills_factors$dist_permwater, landfills_factors$dist_ocean))
 
-## account for NA values
-landfills_factors[is.na(landfills_factors$waste),]
-
-## Con Do belongs to Bà Rịa–Vũng Tàu province (=70-200.000 waste)
-landfills_factors$waste[is.na(landfills_factors$waste)] <- "70-200.000"
-
-str(landfills_factors)
+str(landfills)
 
 # change character to integer values
 from <- c("10-30.000","30-50.000","50-70.000","70-200.000","200-300.000","300-2.500.000")
 to <- c(10000,30000,50000,70000,200000,300000)
-landfills_factors$waste <- plyr::mapvalues(landfills_factors$waste, from, to)
-landfills_factors$waste <- as.integer(landfills_factors$waste)
+landfills$waste <- plyr::mapvalues(landfills$waste, from, to)
+landfills$waste <- as.integer(landfills$waste)
 
-str(landfills_factors)
+str(landfills)
 
 # only keep plastic leakage factors
-leakage_factors <- landfills_factors[,c(5,8:18)]
+leakage_factors <- landfills@data[,c(5,8:17)]
 
 ## remove dependent variable (leakage)
 leakage_factors_indep <- leakage_factors[,-11]
 
 
-## download dataframe as CSV
-filename <- paste(dir,"/landfill_variables.csv", sep= "")
-write.table(landfills_factors, file = filename, row.names = F, fileEncoding = "UTF-8", sep = ";")
-
-
 
 #### II. Exploratory Data Analysis ####
+
+describe(leakage_factors_indep) # waste has huge sd
+describe(leakage_factors_km) # watermin has sd of 592
+
 
 #### Outlier Analysis
 
@@ -87,7 +86,7 @@ boxplot(leakage_factors_indep$watermin)
 ## extract outliers
 out <- boxplot.stats(leakage_factors_indep$area_ha)$out
 # find corresponding row
-out_ind <- which(eakage_factors_indep %in% c(out))
+out_ind <- which(leakage_factors_indep %in% c(out))
 
 
 ## Density Plot
@@ -177,7 +176,7 @@ fa.diagram(fa.none)
 
 #### 0) Normalize
 
-leakage_factors_km <- leakage_factors_main
+leakage_factors_km <- leakage_factors_indep[-c(1,4,5,7,8,10)]
 
 ## Normalize Data to account for different scales 
 # mean = 0 & standard deviation = 1
@@ -194,7 +193,7 @@ hist(leakage_factors_norm)
 # drop no. storms
 leakage_factors_norm2 <- scale(leakage_factors_km[-5])
 
-# drop area
+# drop area & storms
 leakage_factors_norm3 <- scale(leakage_factors_km[-c(1,5)])
 
 
@@ -225,11 +224,11 @@ fviz_nbclust(leakage_factors_km, kmeans, method = "wss") # 7 clusters, unstandar
 
 ## 2. Silhouette Method
 # how well each object lies within its cluster
-fviz_nbclust(leakage_factors_norm, kmeans, method = "silhouette") # 9 clusters, unstandardized: 3
+fviz_nbclust(leakage_factors_km, kmeans, method = "silhouette") # 9 clusters, unstandardized: 3
 
 
 ## 3. Gap statistic
-gap_stat <- clusGap(leakage_factors_norm,
+gap_stat <- clusGap(leakage_factors_km,
                     FUN = kmeans,
                     K.max = ncol(leakage_factors_norm),
                     nstart = 25,
@@ -241,6 +240,7 @@ fviz_gap_stat(gap_stat) # 1 cluster, unstandardized: 3
 
 ## 4. Consensus-based
 n_clusters(leakage_factors_km, package = "all", standardize = T) # 6 clusters, unstandardized: 3
+
 
 
 #### K-means Clustering
@@ -327,12 +327,13 @@ leakage_factors_main <- cbind(leakage_factors_main, pam_unstand = pam$cluster)
 #### c) Hierarchical Clustering
 
 # Compute the dissimilarity matrix
-hc_dist <- dist(leakage_factors_km, method = "euclidean")
+hc_dist <- dist(leakage_factors_norm, method = "euclidean")
 
-## singlw linkage
+## single linkage
 # uses maximum distance between observations
 hc_single <- eclust(leakage_factors_km, "hclust", k = 3, hc_method = "single", graph = F)
 plot(hc_single)
+cutree(hc_single, k = 3)
 
 ## complete linkage
 # uses maximum distance between observations
@@ -347,7 +348,7 @@ cutree(hc_complete, k = 3)
 
 ## average linkage
 # average distance
-hc_average <- eclust(leakage_factors_km, "hclust", k = 3, hc_method = "average", graph = F)
+hc_average <- eclust(leakage_factors_m, "hclust", k = 3, hc_method = "average", graph = F)
 hc_average <- hclust(hc_dist, method = "average")
 plot(hc_average)
 rect.hclust(hc_average,
@@ -371,13 +372,13 @@ fviz_dend(hc_ward, k = 3,
 )
 
 ## Silhouette Method
-# average distance between clusters - optimla value near 1
+# average distance between clusters - optimal value near 1
 # find best hierarchical clustering approach
 fviz_silhouette(hc_single) # 0.86 for 2 clusters
-fviz_silhouette(hc_complete) # 0.8 for 2 clusters, 0.7 for 3 clusters
-fviz_silhouette(hc_average) # 0.8 for 2 clusters
-fviz_silhouette(hc_centroid) # 0.77 for 2 clusters
-fviz_silhouette(hc_ward) # 0.77 for 2 clusters
+fviz_silhouette(hc_complete) # 0.81 for 2 clusters, 0.7 for 3 clusters
+fviz_silhouette(hc_average) # 0.81 for 2 clusters
+fviz_silhouette(hc_centroid) # 0.78 for 2 clusters
+fviz_silhouette(hc_ward) # 0.78 for 2 clusters
 
 
 aggregate(leakage_factors_km, by=list(cluster=hc_complete$cluster), mean)
@@ -390,10 +391,12 @@ leakage_factors_main <- cbind(leakage_factors_main, ec_cluster_unstand = hc_comp
 fc <- fanny(leakage_factors_km, 3, metric = "euclidean")
 
 # Dunn index - low value indicates fuzzy clustering, value close to 1 indicates a near-crisp clustering
-fc$coeff # 0.65
+fc$coeff # 0.67
 
 fviz_cluster(fc, repel = T, palette = "jco", ggtheme = theme_minimal(), legend = "right")
 fviz_silhouette(fc, palette = "jco", ggtheme = theme_minimal()) # 0.74 for 3 clusters
+
+leakage_factors_main <- cbind(leakage_factors_main, fc_cluster_unstand = fc$clustering)
 
 
 
@@ -401,17 +404,19 @@ fviz_silhouette(fc, palette = "jco", ggtheme = theme_minimal()) # 0.74 for 3 clu
 ## as kmeans & hierarchical clustering severely affected by noise and outliers in data
 
 # find optimum eps value
-kNNdistplot(leakage_factors_norm, k = 3)
-abline(h = 2.4, lty = 2)
+kNNdistplot(leakage_factors_km, k = 3)
+abline(h = 150, lty = 2)
 
 # Compute DBSCAN using fpc package
 set.seed(123)
-db <- dbscan(leakage_factors_norm, eps = 2.5, MinPts = 3)
+db <- dbscan(leakage_factors_km, eps = 150, MinPts = 3)
 
 # Plot DBSCAN results
-fviz_cluster(db, data = leakage_factors_norm, stand = FALSE,
+fviz_cluster(db, col = db$cluster, data = leakage_factors_norm, stand = FALSE,
              ellipse = FALSE, show.clust.cent = FALSE,
              geom = "point", palette = "jco", ggtheme = theme_classic())
+
+leakage_factors_main <- cbind(leakage_factors_main, db_cluster_unstand = db$cluster)
 
 
 
@@ -432,12 +437,28 @@ plot(intern)
 
 ## 2. External Validation
 
+plot_qq(leakage_factors_main[,1:8], by = "km_cluster_unstand")
+plot_qq(leakage_factors_main[,c(1:7,12)], by = "risk_label")
+
+leakage_factors_main[,1:8] %>% plot_density(geom_density_args = list("fill" = "km_cluster_unstand"))
+
+leakage_factors_main[,1:7] %>% plot_histogram(geom_histogram_args = list("fill" = "green"))
+
+plot_boxplot(leakage_factors_main[,c(2:4,6:8)], by = "km_cluster_unstand")
+plot_boxplot(leakage_factors_main[,c(2:4,6:7,9)], by = "km_cluster_stand") # not good results, maxima spread across clusters
+plot_boxplot(leakage_factors_main[,c(2:4,6:7,14)], by = "ec_cluster_unstand") # similar to kmeans
+plot_boxplot(leakage_factors_main[,c(2:4,6:7,16)], by = "fc_cluster_unstand")
+plot_boxplot(leakage_factors_main[,c(2:4,6:7,12)], by = "risk_label")
+
+plot_scatterplot(split_columns(leakage_factors_main[,c(2:4,6:8)])$continuous, by = "km_cluster_unstand")
+plot_scatterplot(split_columns(leakage_factors_main[,c(2:4,6:8,14)])$continuous, by = "ec_cluster_unstand")
+plot_scatterplot(split_columns(leakage_factors_main[,c(2:4,6:8,11)])$continuous, by = "risk")
+
 #### TODO: compare clusters with manual risk assessment ####
 
 
 
-
-#### Manual Risk Assessment ####
+#### V. Manual Risk Assessment ####
 
 describe(leakage_factors_main)
 
@@ -470,17 +491,24 @@ quantile(leakage_factors_main$flood_risk)
 quantile(leakage_factors_main$flood_risk, probs = c(1/3, 2/3))
 
 ## slope
-# < 0.01: low risk
-# < 0.05: medium risk
+# < 0.015: low risk
+# < 0.045: medium risk
 quantile(leakage_factors_main$slope)
 quantile(leakage_factors_main$slope, probs = c(1/3, 2/3))
 
 ## (landfill area)
-#
+# < 1: low risk
+# < 6: medium risk
 quantile(leakage_factors_main$area_ha)
+quantile(leakage_factors_main$area_ha, probs = c(1/3, 2/3))
 
+## storms
+# = 0: low risk
+# < 1: medium risk
+quantile(leakage_factors_main$no_storms)
+quantile(leakage_factors_main$no_storms, probs = c(1/3, 2/3))
 
-
+#leakage_factors_main$risk1 <- leakage_factors_main$risk
 leakage_factors_main$risk <- 0
 ## compute risk value per landfill
 # 0: low, 1: medium, 2: high
@@ -488,7 +516,7 @@ leakage_factors_main$risk <- 0
 i <- 1
 while (i <= nrow(leakage_factors_main)) {
   ## rain risk
-  ifelse(leakage_factors_main$rain[i] <= 3, leakage_factors_main$risk[i] <- leakage_factors_main$risk[i] + 0, 
+  ifelse(leakage_factors_main$rain[i] < 3, leakage_factors_main$risk[i] <- leakage_factors_main$risk[i] + 0, 
          ifelse(leakage_factors_main$rain[i] < 15, leakage_factors_main$risk[i] <- leakage_factors_main$risk[i] + 1, 
                 leakage_factors_main$risk[i] <- leakage_factors_main$risk[i] + 2))
 
@@ -503,14 +531,24 @@ while (i <= nrow(leakage_factors_main)) {
                 leakage_factors_main$risk[i] <- leakage_factors_main$risk[i] + 2))
 
   ## flooding
-  ifelse(leakage_factors_main$flood_risk[i] <= 10, leakage_factors_main$risk[i] <- leakage_factors_main$risk[i] + 0, 
+  ifelse(leakage_factors_main$flood_risk[i] < 10, leakage_factors_main$risk[i] <- leakage_factors_main$risk[i] + 0, 
          ifelse(leakage_factors_main$flood_risk[i] < 20, leakage_factors_main$risk[i] <- leakage_factors_main$risk[i] + 1, 
                 leakage_factors_main$risk[i] <- leakage_factors_main$risk[i] + 2))
   
   ## slope
-  ifelse(leakage_factors_main$slope[i] < 0.01, leakage_factors_main$risk[i] <- leakage_factors_main$risk[i] + 0, 
-         ifelse(leakage_factors_main$slope[i] < 0.05, leakage_factors_main$risk[i] <- leakage_factors_main$risk[i] + 1, 
+  ifelse(leakage_factors_main$slope[i] < 0.015, leakage_factors_main$risk[i] <- leakage_factors_main$risk[i] + 0, 
+         ifelse(leakage_factors_main$slope[i] < 0.045, leakage_factors_main$risk[i] <- leakage_factors_main$risk[i] + 1, 
                 leakage_factors_main$risk[i] <- leakage_factors_main$risk[i] + 2))
+  
+  # ## area
+  # ifelse(leakage_factors_main$area_ha[i] < 1, leakage_factors_main$risk[i] <- leakage_factors_main$risk[i] + 0, 
+  #        ifelse(leakage_factors_main$area_ha[i] < 6, leakage_factors_main$risk[i] <- leakage_factors_main$risk[i] + 1, 
+  #               leakage_factors_main$risk[i] <- leakage_factors_main$risk[i] + 2))
+  # 
+  # ## storms
+  # ifelse(leakage_factors_main$no_storms[i] == 0, leakage_factors_main$risk[i] <- leakage_factors_main$risk[i] + 0, 
+  #        ifelse(leakage_factors_main$no_storms[i] <= 1, leakage_factors_main$risk[i] <- leakage_factors_main$risk[i] + 1, 
+  #               leakage_factors_main$risk[i] <- leakage_factors_main$risk[i] + 2))
   
   ## increment i
   i <- i+1
@@ -521,4 +559,23 @@ while (i <= nrow(leakage_factors_main)) {
 leakage_factors_main$risk_label <- "medium"
 leakage_factors_main$risk_label[leakage_factors_main$risk <= 3] <- "low"
 leakage_factors_main$risk_label[leakage_factors_main$risk >= 7] <- "high"
+
+
+## add risk data to landfills
+landfills$km_cluster_unstand <- leakage_factors_main$km_cluster_unstand
+landfills$risk <- leakage_factors_main$risk
+landfills$risk_label <- leakage_factors_main$risk_label
+
+## convert to sf object for easier plotting
+landfills_sf <- st_as_sf(landfills)
+
+
+
+#### VI. Plotting Results ####
+
+## plot map with landfills colored by cluster
+# e.g. plot water distance < 500m in red
+plot(vietnam)
+ggplot(data = landfills_sf, aes(color= km_cluster_unstand)) +
+  geom_point()
 
