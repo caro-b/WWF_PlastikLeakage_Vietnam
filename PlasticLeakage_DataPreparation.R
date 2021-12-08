@@ -18,7 +18,7 @@ if(length(new.packages)) install.packages(new.packages)
 lapply(packagelist, require, character.only = TRUE)
 
 # set folder 'data' as directory from which to import data
-dir <- 'D:/Documents/WWF_PlastikLeakage_Vietnam/data'
+dir <- 'C://Users//carob//Documents//WWF_PlastikLeakage_Vietnam//data'
 
 
 
@@ -27,19 +27,19 @@ dir <- 'D:/Documents/WWF_PlastikLeakage_Vietnam/data'
 ## download country boundary of Vietnam from GADM via inbuilt function
 #vietnam <- getData('GADM', country='VNM', level=0)
 # downloaded from https://data.humdata.org/dataset/viet-nam-administrative-boundaries-polygon-polyline
-vietnam <- readOGR(paste(dir, "/vietnam/vietnam_new.shp", sep = ""))
+vietnam <- readOGR(paste(dir, "/vietnam/vietnam.shp", sep = ""))
 
 
 #### Plastic Leakage Factors
 
 ## data downloaded for time period: 01.10.2016-01.10.2021
 
-#### 1. Precipitation (daily)
+#### 1. Precipitation (daily)(mm)
 
 ## a) NOAA GHCN (daily)
 # downloaded from: https://www.ncdc.noaa.gov/cdo-web/datasets/GHCND/locations/FIPS:VM/detail
-# downloaded in metric units (mm)
-prcp_noaa <- read_csv(paste(dir, "/2755974.csv", sep = ""))
+# downloaded as CSV
+prcp_noaa <- read_csv(paste(dir, "/2814077.csv", sep = ""))
 
 
 ## b) Meteostat
@@ -49,7 +49,6 @@ prcp_meteostat <- read_csv(paste(dir, "/Meteostat_PrecipitationDaily.csv", sep =
 
 
 #### 2. Wind Speed (hourly)
-
 ## downloaded via python API
 wind_meteostat <- read_csv(paste(dir, "/Meteostat_WindHourly.csv", sep = ""))
 
@@ -57,7 +56,7 @@ wind_meteostat <- read_csv(paste(dir, "/Meteostat_WindHourly.csv", sep = ""))
 
 #### 3. Water Areas (JRC Global Surface Water)
 ## downloaded via Google Earth Engine & processed in QGIS (faster & less memory)
-jrc_water <- raster(paste(dir, "/JRC_GlobalSurfaceWater_Vietnam_new_50_clipped.tif", sep = ""))
+jrc_water <- raster(paste(dir, "/JRC_GlobalSurfaceWater_Vietnam_clipped.tif", sep = ""))
 #jrc_water_perm <- raster(paste(dir, "/JRC_GlobalSurfaceWater_Vietnam_perm.tif", sep = ""))
 # reads proxy as actual raster to big
 #jrc_water_perm <- read_stars(paste(dir, "/JRC_GlobalSurfaceWater_Vietnam_perm.tif", sep = ""), NA_value = 0)
@@ -67,42 +66,42 @@ jrc_water <- raster(paste(dir, "/JRC_GlobalSurfaceWater_Vietnam_new_50_clipped.t
 #### 4. Natural Hazards (Flooding & Storm)
 
 #### a) Flooding
+## derived from JRC Global Surface Water Dataset
 
 
 #### b) Storm
 # may take some time (big dataset)
-storm <- readOGR(paste(dir, "/unisys_tracks_1956_2018dec31/UNISYS_tracks_1956_2018Dec31.shp", sep = ""), use_iconv = TRUE, encoding = "UTF-8")
+#storm <- readOGR(paste(dir, "/unisys_tracks_1956_2018dec31/UNISYS_tracks_1956_2018Dec31.shp", sep = ""), use_iconv = TRUE, encoding = "UTF-8")
 
 
 
 #### 5. Topography - DEM (Digital Elevation Model)
+## downloaded from: https://data.opendevelopmentmekong.net/en/dataset/digital-elevation-model-dem
+
 # import DEM of Vietnam (30m) as RasterLayer
 dem <- raster(paste(dir, "/dem/dem_compress.tif", sep = ""))
-#dem <- read_stars(paste(dir, "/dem/dem_compress.tif", sep = ""))
 
-dem_subset <- dem
 # remove NA values
-dem_subset[dem_subset < 0] <- NA
-plot(dem_subset)
+#dem_subset <- dem
+#dem_subset[dem_subset < 0] <- NA
+#plot(dem_subset)
 
 # calculate slope
-slope <- terrain(dem_subset, opt = 'slope')
+slope <- terrain(dem, opt = 'slope')
 
 # add slope as band
-dem_stack <- stack(dem_subset, slope)
+#dem_stack <- stack(dem_subset, slope)
 
 # rename band
-names(dem_stack)[[1]] <- "elevation"
+#names(dem_stack)[[1]] <- "elevation"
 
-plot(dem_stack$elevation, main = "Elevation (DEM)")
-plot(vietnam, add=T)
-plot(dem_stack$slope, main = "Slope (DEM)")
+plot(slope, main = "Slope (DEM)")
 plot(vietnam, add=T)
 
 
 
 #### 6. Waste Generation
-waste <- readOGR(paste(dir, "/gadm36_VNM_1_wasteperprovince_20032019_UTM48N.shp", sep = ""), use_iconv = TRUE, encoding = "UTF-8")
+#waste <- readOGR(paste(dir, "/gadm36_VNM_1_wasteperprovince_20032019_UTM48N.shp", sep = ""), use_iconv = TRUE, encoding = "UTF-8")
 
 
 
@@ -153,35 +152,35 @@ sum(duplicated(wind_meteostat[,1:3])) #0
 
 #### b) Storm
 ## only keep needed rows
-storm <- storm[,names(storm) %in% c("ADV_DATE","ADV_HOUR","SPEED")]
-
-## convert data to simple feature object (sf) (for easier operation & later plotting with ggplot)
-storm_sf <- st_as_sf(storm)
-
-## first change CRS to WGS84
-crs(storm_sf)
-crs(vietnam)
-
-storm_sf_wgs84 <- st_transform(storm_sf, crs(vietnam))
-
-## clip to outline of vietnam
-storm_vnm <- st_intersection(storm_sf_wgs84, st_as_sf(vietnam))
-
-## remove not needed columns
-storm_vnm$GID_0 <- NULL
-storm_vnm$NAME_0 <- NULL
-
-plot(storm_vnm$geometry)
-plot(vietnam, add =T)
+# storm <- storm[,names(storm) %in% c("ADV_DATE","ADV_HOUR","SPEED")]
+# 
+# ## convert data to simple feature object (sf) (for easier operation & later plotting with ggplot)
+# storm_sf <- st_as_sf(storm)
+# 
+# ## first change CRS to WGS84
+# crs(storm_sf)
+# crs(vietnam)
+# 
+# storm_sf_wgs84 <- st_transform(storm_sf, crs(vietnam))
+# 
+# ## clip to outline of vietnam
+# storm_vnm <- st_intersection(storm_sf_wgs84, st_as_sf(vietnam))
+# 
+# ## remove not needed columns
+# storm_vnm$GID_0 <- NULL
+# storm_vnm$NAME_0 <- NULL
+# 
+# plot(storm_vnm$geometry)
+# plot(vietnam, add =T)
 
 
 
 #### 6. Waste Generation
 ## remove not needed columns
-waste <- waste[,names(waste) %in% c("VARNAME_1","ENGTYPE_1","waste.t.y.","leakage...")]
-
-## rename columns
-names(waste) <- c("location","type","waste_t_y","leakage_perc")
+# waste <- waste[,names(waste) %in% c("VARNAME_1","ENGTYPE_1","waste.t.y.","leakage...")]
+# 
+# ## rename columns
+# names(waste) <- c("location","type","waste_t_y","leakage_perc")
 
 
 
@@ -220,6 +219,8 @@ heavywind_stations <- wind_meteostat %>% group_by(station) %>% dplyr::summarise(
 ## add coordinates to stations
 # station location data - from meteostat data (as noaa is only one of its sources)
 station_data <- unique(prcp_meteostat[,c(1,4:6)])
+## add noaa stations
+station_data <- rbind(station_data, unique(prcp_noaa[,c(1:4)])[!unique(prcp_noaa$station) %in% station_data$station,])
 
 # first convert to same data type
 typeof(heavywind_stations$station) # double

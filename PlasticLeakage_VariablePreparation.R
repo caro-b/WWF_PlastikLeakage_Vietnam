@@ -17,13 +17,13 @@ if(length(new.packages)) install.packages(new.packages)
 lapply(packagelist, require, character.only = TRUE)
 
 # set folder 'data' as directory from which to import data
-dir <- 'D:/Documents/WWF_PlastikLeakage_Vietnam/data'
+dir <- 'C:/Users/carob/Documents/WWF_PlastikLeakage_Vietnam/data'
 
 
 
 #### I. Import landfill Locations ####
 ## import landfill polygons
-landfills <- readOGR(paste(dir, "/OpenLandfills_Vietnam/OpenLandfills_Vietnam_all.shp", sep = ""), use_iconv = T, encoding = "UTF-8")
+landfills <- readOGR(paste(dir, "/landfills/OpenLandfills_Vietnam.shp", sep = ""), use_iconv = T, encoding = "UTF-8")
 plot(landfills)
 ## access & plot first landfill
 plot(landfills[1,])
@@ -160,23 +160,23 @@ distance_ocean <- function(landfills_factors) {
 
 #### b) Storm Tracks
 
-# initiate columns with dummy variable
-landfills_factors$no_storms <- -1
-
-## function to find nearest water & save corresponding data
-find_storms <- function(landfills_factors) {
-  
-  # get water in 1km buffer around landfill - then high risk
-  buffer <- st_buffer(landfills_sf_centroids[i,], dist = 1000) # 10km
-  
-  # intersect to get storm tracks in buffer
-  storm <- st_intersection(storm_vnm, st_as_sf(buffer))
-  
-  # count number of storm tracks in buffer - higher risk
-  landfills_factors[i,]$no_storms <- nrow(storm)
-  
-  return(landfills_factors)
-}
+# # initiate columns with dummy variable
+# landfills_factors$no_storms <- -1
+# 
+# ## function to find nearest water & save corresponding data
+# find_storms <- function(landfills_factors) {
+#   
+#   # get water in 1km buffer around landfill - then high risk
+#   buffer <- st_buffer(landfills_sf_centroids[i,], dist = 1000) # 10km
+#   
+#   # intersect to get storm tracks in buffer
+#   storm <- st_intersection(storm_vnm, st_as_sf(buffer))
+#   
+#   # count number of storm tracks in buffer - higher risk
+#   landfills_factors[i,]$no_storms <- nrow(storm)
+#   
+#   return(landfills_factors)
+# }
 
 
 
@@ -197,36 +197,36 @@ mean_slope <- function(landfills_factors) {
 
 #### 6. Waste Generation & Leakage
 ## polygon per province --> in which polygon landfill lies in
-waste_sf <- st_as_sf(waste)
+#waste_sf <- st_as_sf(waste)
 
 # convert CRS to get matching CRS
-landfills_sf_utm48 <- st_transform(landfills_sf, crs(waste_sf))
+#landfills_sf_utm48 <- st_transform(landfills_sf, crs(waste_sf))
 
-landfills_factors$waste <- -1
-landfills_factors$leakage <- -1
+# landfills_factors$waste <- -1
+# landfills_factors$leakage <- -1
 
 ## function that finds province in which landfill lies & saves corresponding waste data
-waste_province <- function(landfills_factors) {
-  waste <- st_intersection(waste_sf, landfills_sf_utm48[i,], sparse=T)
-  if (nrow(waste) != 0) {
-    landfills_factors[i,]$waste <- waste$waste_t_y
-    landfills_factors[i,]$leakage <- waste$leakage_perc
-  } else {
-    landfills_factors[i,]$waste <- NA
-    landfills_factors[i,]$leakage <- NA
-  }
-  return(landfills_factors)
-}
+# waste_province <- function(landfills_factors) {
+#   waste <- st_intersection(waste_sf, landfills_sf_utm48[i,], sparse=T)
+#   if (nrow(waste) != 0) {
+#     landfills_factors[i,]$waste <- waste$waste_t_y
+#     landfills_factors[i,]$leakage <- waste$leakage_perc
+#   } else {
+#     landfills_factors[i,]$waste <- NA
+#     landfills_factors[i,]$leakage <- NA
+#   }
+#   return(landfills_factors)
+# }
+# 
+# ## account for NA values
+# landfills_factors[is.na(landfills_factors$waste),]
+# 
+# ## Con Do belongs to Bà Rịa–Vũng Tàu province (=70-200.000 waste)
+# landfills_factors$waste[is.na(landfills_factors$waste)] <- "70-200.000"
 
-## account for NA values
-landfills_factors[is.na(landfills_factors$waste),]
-
-## Con Do belongs to Bà Rịa–Vũng Tàu province (=70-200.000 waste)
-landfills_factors$waste[is.na(landfills_factors$waste)] <- "70-200.000"
 
 
-
-## loop over landfills - take one landfill at once & find nearest climate station
+## loop over landfills - take one landfill at once & calculate variable values
 # index for loop
 i <- 1
 while (i <= length(landfills_factors$geometry)) {
@@ -235,11 +235,11 @@ while (i <= length(landfills_factors$geometry)) {
   # function to find nearest water body
   landfills_factors <- nearest_water(landfills_factors)
   # function to count storms near landfill
-  landfills_factors <- find_storms(landfills_factors)
+  #landfills_factors <- find_storms(landfills_factors)
   # function to get mean slope per landfill area
   landfills_factors <- mean_slope(landfills_factors)
   # function to test in which province landfill lies & save corresponding waste generation
-  landfills_factors <- waste_province(landfills_factors)
+  #landfills_factors <- waste_province(landfills_factors)
   # distance to ocean
   landfills_factors <- distance_ocean(landfills_factors)
   # increment i
@@ -252,4 +252,4 @@ filename <- paste(dir,"/landfill_variables.csv", sep= "")
 write.table(landfills_factors, file = filename, row.names = F, fileEncoding = "UTF-8", sep = ";")
 
 ## save as shapefile
-st_write(landfills_factors, paste(dir,"/landfill_variables.gpkg", sep= ""), overwrite=T)
+st_write(landfills_factors, paste(dir,"/landfill_variables.gpkg", sep= ""), overwrite=T, append=F)
