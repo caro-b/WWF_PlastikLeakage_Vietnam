@@ -559,7 +559,9 @@ landfills_sf <- st_as_sf(landfills)
 cof <- colorFactor(c("red","green","blue"), domain=c("1","2","3"))
 
 leaflet(landfills_sf) %>%
-  addTiles() %>%  # Add default OpenStreetMap map tiles
+  #addTiles() %>%  # Add default OpenStreetMap map tiles
+  addProviderTiles(providers$Esri.WorldImagery) %>% 
+  #addProviderTiles(providers$CartoDB.DarkMatter) %>% 
   setView(lng = 105.48, lat = 15.54, zoom = 5) %>%
   addCircleMarkers(color = ~cof(km_cluster_unstand), radius = sqrt(landfills_sf$area_ha)*2, fillOpacity = 0.5) %>%
   addLegend("bottomright", colors= c("red","blue","green"), labels=c("high", "medium", "low"), title="Leakage Risk") 
