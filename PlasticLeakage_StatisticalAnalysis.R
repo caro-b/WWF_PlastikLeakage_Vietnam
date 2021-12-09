@@ -9,7 +9,7 @@
 #### 0. SETUP ####
 
 # install required packages (if not installed yet)
-packagelist <- c("corrplot","clValid","cluster","DataExplorer","dbscan","dplyr","factoextra","fpc","ggplot2","NbClust","parameters","psych","readr","rgdal","sf","sp","tidyverse")
+packagelist <- c("corrplot","clValid","cluster","DataExplorer","dbscan","dplyr","factoextra","fpc","ggplot2","NbClust","leaflet","parameters","psych","readr","rgdal","sf","sp","tidyverse")
 new.packages <- packagelist[!(packagelist %in% installed.packages()[,"Package"])]
 if(length(new.packages)) install.packages(new.packages)
 
@@ -544,15 +544,24 @@ plot_scatterplot(split_columns(leakage_factors_main[,c(1:5,12)])$continuous, by 
 
 
 
-
 #### VII. Plotting Results ####
 
 ## convert to sf object for easier plotting
 landfills_sf <- st_as_sf(landfills)
 
+
+#### Interactive Map
+
 ## plot map with landfills colored by cluster
 # e.g. plot water distance < 500m in red
-plot(vietnam)
-ggplot(data = landfills_sf, aes(color= km_cluster_unstand)) +
-  geom_point()
+
+# create color palette
+cof <- colorFactor(c("red","green","blue"), domain=c("1","2","3"))
+
+leaflet(landfills_sf) %>%
+  addTiles() %>%  # Add default OpenStreetMap map tiles
+  setView(lng = 105.48, lat = 15.54, zoom = 5) %>%
+  addCircleMarkers(color = ~cof(km_cluster_unstand), radius = sqrt(landfills_sf$area_ha)*2, fillOpacity = 0.5) %>%
+  addLegend("bottomright", colors= c("red","blue","green"), labels=c("high", "medium", "low"), title="Leakage Risk") 
+
 
