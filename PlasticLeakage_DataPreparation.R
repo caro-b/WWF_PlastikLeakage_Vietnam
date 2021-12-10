@@ -79,12 +79,12 @@ jrc_water <- raster(paste(dir, "/JRC_GlobalSurfaceWater_Vietnam_30.tif", sep = "
 ## downloaded from: https://data.opendevelopmentmekong.net/en/dataset/digital-elevation-model-dem
 
 # import DEM of Vietnam (30m) as RasterLayer
-dem <- raster(paste(dir, "/dem/dem_compress.tif", sep = ""))
+dem <- raster(paste(dir, "/dem/dem_compress_clipped.tif", sep = ""))
 
 # remove NA values
-#dem_subset <- dem
-#dem_subset[dem_subset < 0] <- NA
-#plot(dem_subset)
+# dem_subset <- dem
+# dem_subset[dem_subset < 0] <- NA
+# plot(dem_subset)
 
 # calculate slope
 slope <- terrain(dem, opt = 'slope')
