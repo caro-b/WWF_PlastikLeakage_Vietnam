@@ -30,6 +30,7 @@ vietnam <- readOGR(paste(dir, "/vietnam/vietnam.shp", sep = ""))
 ## import landfill polygons
 landfills <- readOGR(paste(dir, "/landfill_variables.gpkg", sep = ""))
 
+landfills_factors <- landfills@data
 
 
 #### I. Data Preparation
@@ -121,13 +122,11 @@ leakage_factors_main <- leakage_factors[-c(1,4,5,7)]
 describe(leakage_factors)
 X <- leakage_factors
 X2 <- leakage_factors[-c(4,5,7)]# only include watermin
-X3 <- leakage_factors[-11]# drop watermin
 X4 <- leakage_factors_main # pre-defined variable set (from correlation matrix)
 
 # KMO test to measure of how suited your data is for Factor Analysis
 KMO(r=cor(X)) # items with KMO < 0.5 should be dropped
 KMO(r=cor(X2)) # 0.64 - factor analysis could make sense (must be > 0.6)
-KMO(r=cor(X3)) # 0.46
 KMO(r=cor(X4)) # 0.54
 
 cortest.bartlett(X3) # significance level < 0.05 indicates factor analysis might be useful
@@ -432,9 +431,12 @@ quantile(leakage_factors_main$watermin, probs = c(1/3, 2/3))
 quantile(leakage_factors_main$flood_risk)
 quantile(leakage_factors_main$flood_risk, probs = c(1/3, 2/3))
 
-## slope
-# < 0.015: low risk
-# < 0.045: medium risk
+## slope 
+# first convert slope from degrees into percentage
+leakage_factors_main$slope_perc <- leakage_factors_main$slope * 100 / 360
+
+# < 0.15: low risk
+# < 0.3: medium risk
 quantile(leakage_factors_main$slope)
 quantile(leakage_factors_main$slope, probs = c(1/3, 2/3))
 
@@ -444,11 +446,11 @@ quantile(leakage_factors_main$slope, probs = c(1/3, 2/3))
 quantile(leakage_factors_main$area_ha)
 quantile(leakage_factors_main$area_ha, probs = c(1/3, 2/3))
 
-## storms
-# = 0: low risk
-# < 1: medium risk
-quantile(leakage_factors_main$no_storms)
-quantile(leakage_factors_main$no_storms, probs = c(1/3, 2/3))
+# ## storms
+# # = 0: low risk
+# # < 1: medium risk
+# quantile(leakage_factors_main$no_storms)
+# quantile(leakage_factors_main$no_storms, probs = c(1/3, 2/3))
 
 #leakage_factors_main$risk1 <- leakage_factors_main$risk
 leakage_factors_main$risk <- 0
@@ -478,8 +480,8 @@ while (i <= nrow(leakage_factors_main)) {
                 leakage_factors_main$risk[i] <- leakage_factors_main$risk[i] + 2))
   
   ## slope
-  ifelse(leakage_factors_main$slope[i] < 0.015, leakage_factors_main$risk[i] <- leakage_factors_main$risk[i] + 0, 
-         ifelse(leakage_factors_main$slope[i] < 0.045, leakage_factors_main$risk[i] <- leakage_factors_main$risk[i] + 1, 
+  ifelse(leakage_factors_main$slope[i] < 0.15, leakage_factors_main$risk[i] <- leakage_factors_main$risk[i] + 0, 
+         ifelse(leakage_factors_main$slope[i] < 0.45, leakage_factors_main$risk[i] <- leakage_factors_main$risk[i] + 1, 
                 leakage_factors_main$risk[i] <- leakage_factors_main$risk[i] + 2))
   
   # ## area
@@ -528,7 +530,7 @@ plot(intern)
 ## 2. External Validation
 
 plot_qq(leakage_factors_main[,1:8], by = "km_cluster_unstand")
-plot_qq(leakage_factors_main[,c(1:5,13)], by = "risk_label")
+plot_qq(leakage_factors_main[,c(1:5,14)], by = "risk_label")
 
 #leakage_factors_main[,1:8] %>% plot_density(geom_density_args = list("fill" = "km_cluster_unstand"))
 
@@ -540,7 +542,7 @@ plot_boxplot(leakage_factors_main[,c(1:5,13)], by = "risk_label")
 
 plot_scatterplot(split_columns(leakage_factors_main[,c(1:6)])$continuous, by = "km_cluster_unstand")
 plot_scatterplot(split_columns(leakage_factors_main[,c(1:5,9)])$continuous, by = "ec_cluster_unstand")
-plot_scatterplot(split_columns(leakage_factors_main[,c(1:5,12)])$continuous, by = "risk")
+plot_scatterplot(split_columns(leakage_factors_main[,c(1:5,13)])$continuous, by = "risk")
 
 
 

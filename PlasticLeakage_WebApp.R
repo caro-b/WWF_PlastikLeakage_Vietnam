@@ -9,7 +9,7 @@
 ## Develop an interactive web app for users & stakeholders to get an overview over the risk assessment & the data included
 
 # install required packages (if not installed yet)
-packagelist <- c("dplyr","ggplot2","leafem","leaflet","RColorBrewer","readr","rgdal","sf","shiny","sp","stars","tidyverse")
+packagelist <- c("dplyr","ggplot2","leafem","leaflet","raster","RColorBrewer","readr","rgdal","sf","shiny","sp","stars","tidyverse")
 new.packages <- packagelist[!(packagelist %in% installed.packages()[,"Package"])]
 if(length(new.packages)) install.packages(new.packages)
 
@@ -59,7 +59,9 @@ map
 # for large rasters use stars package
 
 ## DEM
-dem = read_stars("C:/Users/carob/Documents/WWF_PlastikLeakage_Vietnam/data/dem/dem_compress_clipped.tif")
+dem <- read_stars(paste(dir, "/dem/dem_slope.tif", sep = ""))
+dem_raster <- raster(paste(dir, "/dem/dem_slope.tif", sep = ""))
+
 st_is_longlat(dem)
 
 fl = tempfile(fileext = ".tif")
@@ -71,7 +73,7 @@ write_stars(dem, dsn = fl)
 pal_dem <- RColorBrewer::brewer.pal(9, "Greys")
 
 # define own color palette
-#col <- c("#E1F5C4", "#EDE574", "#F9D423", "#FC913A", "#FF4E50")
+pal_dem2 <- colorNumeric(c('#000000', '#808080', '#ffffff'), values(dem_raster), na.color = "transparent")
 
 
 ## JRC Water
@@ -91,15 +93,16 @@ write_stars(jrc_ds, dsn = file)
 
 # define own color palette
 pal <- RColorBrewer::brewer.pal(9, "Blues")
+#"#0C2C84", "#41B6C4", "#FFFFCC"
 
 
 map_raster <- leaflet(options = leafletOptions(noWrap = T)) %>%
   setView(lng = 105.48, lat = 15.54, zoom = 5) %>%
   # Base groups
   #addTiles(group = "OSM") %>% # Add OpenStreetMap map tiles
-  addProviderTiles("OpenStreetMap", group = "OSM") %>% 
-  addProviderTiles(providers$CartoDB.DarkMatter, group = "Dark") %>%
-  addProviderTiles(providers$Esri.WorldImagery, group = "Satellite") %>% 
+  #addProviderTiles("OpenStreetMap", group = "OSM") %>% 
+  #addProviderTiles(providers$CartoDB.DarkMatter, group = "Dark") %>%
+  addProviderTiles(providers$Esri.WorldImagery) %>% 
   # Add raster images (as overlay groups)
   # addGeoRaster for stars & star_proxy objects
   leafem:::addGeotiff(file = fl, group = "DEM", colorOptions = leafem:::colorOptions( 
@@ -108,16 +111,17 @@ map_raster <- leaflet(options = leafletOptions(noWrap = T)) %>%
     palette = pal, na.color = "transparent")) %>%
   # Overlay groups
   addPolygons(data = vietnam, fill = F, weight = 2, color = "#FFFFCC", group = "Outline") %>%
-  addPolygons(data = landfills, fill = F, weight = 2, color = "#FFFFCC", group = "Landfills") %>%
+  addPolygons(data = landfills, fill = F, weight = 2, color = "black", group = "Landfills") %>%
   addCircleMarkers(data = landfills_sf, color = ~cof(km_cluster_unstand), radius = sqrt(landfills_sf$area_ha)*2, 
-                   fillOpacity = 0.5, group = "Climate") %>%
+                   fillOpacity = 0.5, label = ~name, group = "Risk") %>%
+  addLegend("bottomright", colors= c("red","blue","green"), labels=c("high", "medium", "low"), title="Leakage Risk", group = "Risk") %>%
+  addLegend(pal = pal_dem2, values = values(dem_raster)*100, title = "Slope", group = "DEM") %>%
+  #addLegend(pal = pal, values = values(jrc_raster), title = "Water", group = "Water") %>%
   # Layers control
   addLayersControl(
-    baseGroups = c("OSM", "Dark", "Satellite"),
-    overlayGroups = c("DEM", "Water", "Climate", "Outline", "Landfills"),
+    overlayGroups = c("DEM", "Water", "Risk", "Outline", "Landfills"),
     options = layersControlOptions(collapsed = F)
-  )  
-  addLegend("bottomright", colors= c("red","blue","green"), labels=c("high", "medium", "low"), title="Leakage Risk") 
+  )
 map_raster
 
 #### TODO: raster overlay only works for OSM basemap ?? ####

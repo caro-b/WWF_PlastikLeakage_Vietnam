@@ -86,8 +86,8 @@ dem <- raster(paste(dir, "/dem/dem_compress_clipped.tif", sep = ""))
 # dem_subset[dem_subset < 0] <- NA
 # plot(dem_subset)
 
-# calculate slope
-slope <- terrain(dem, opt = 'slope')
+# calculate slope in degrees
+slope <- terrain(dem, opt = 'slope', unit = 'degrees')
 
 # add slope as band
 #dem_stack <- stack(dem_subset, slope)
@@ -97,6 +97,9 @@ slope <- terrain(dem, opt = 'slope')
 
 plot(slope, main = "Slope (DEM)")
 plot(vietnam, add=T)
+
+# export slope as raster file
+writeRaster(slope, paste(dir, "/dem/dem_slope.tif", sep = ""), overwrite = T)
 
 
 

@@ -24,14 +24,13 @@ dir <- 'C:/Users/carob/Documents/WWF_PlastikLeakage_Vietnam/data'
 #### I. Import landfill Locations ####
 ## import landfill polygons
 landfills <- readOGR(paste(dir, "/landfills/OpenLandfills_Vietnam.shp", sep = ""), use_iconv = T, encoding = "UTF-8")
-plot(landfills)
+#plot(landfills)
 ## access & plot first landfill
 plot(landfills[1,])
 
 ## calculcate landfill area in ha (from meters) (polygon area)
 landfills$area_ha <- area(landfills)/10000
 
-## calculate centroids
 # first convert data to simple feature object (sf) (for easier operation & later plotting with ggplot)
 # convert CRS to get matching CRS
 landfills_sf <- st_as_sf(landfills, crs(jrc_water))
@@ -188,7 +187,7 @@ landfills_factors$slope <- -1
 mean_slope <- function(landfills_factors) {
   
   slope_area <- intersect(slope, landfills[i,])
-  landfills_factors[i,]$slope <- mean(values(slope_area))
+  landfills_factors[i,]$slope <- mean(values(slope_area), na.rm =T)
   
   return(landfills_factors)
 }
