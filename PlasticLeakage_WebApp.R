@@ -48,6 +48,7 @@ map <- leaflet(landfills_sf) %>%
   addProviderTiles(providers$Esri.WorldImagery) %>% 
   #addProviderTiles(providers$CartoDB.DarkMatter) %>% 
   setView(lng = 105.48, lat = 15.54, zoom = 5) %>%
+  addMiniMap %>%
   addCircleMarkers(color = ~cof(km_cluster_unstand), radius = sqrt(landfills_sf$area_ha)*2, fillOpacity = 0.5) %>%
   addLegend("bottomright", colors= c("red","blue","green"), labels=c("high", "medium", "low"), title="Leakage Risk") 
 map
@@ -60,31 +61,29 @@ map
 
 ## DEM
 dem <- read_stars(paste(dir, "/dem/dem_slope.tif", sep = ""))
-dem_raster <- raster(paste(dir, "/dem/dem_slope.tif", sep = ""))
 
 st_is_longlat(dem)
 
-fl = tempfile(fileext = ".tif")
+fl <- tempfile(fileext = ".tif")
 write_stars(dem, dsn = fl)
 
 # color palette
-#pal_dem <- hcl.colors(9, "terrain 2")
-#pal_dem <- terrain.colors(5)
 pal_dem <- RColorBrewer::brewer.pal(9, "Greys")
 
 # define own color palette
-pal_dem2 <- colorNumeric(c('#000000', '#808080', '#ffffff'), values(dem_raster), na.color = "transparent")
+pal_dem2 <- colorNumeric(palette = c('#ffffff', '#808080', '#000000'), domain = c(0,80), na.color = "transparent")
 
 
 ## JRC Water
-jrc = read_stars("C:/Users/carob/Documents/WWF_PlastikLeakage_Vietnam/data/JRC_GlobalSurfaceWater_Vietnam_30.tif")
+jrc <- read_stars("C:/Users/carob/Documents/WWF_PlastikLeakage_Vietnam/data/JRC_GlobalSurfaceWater_Vietnam_30.tif")
+
 st_is_longlat(jrc)
 
 ## needs to be down-sampled else raster to big for R to handle
-jrc_ds = stars:::st_downsample(jrc, n = 10)
+jrc_ds <- stars:::st_downsample(jrc, n = 10)
 dim(jrc_ds)
 
-file = tempfile(fileext = ".tif")
+file <- tempfile(fileext = ".tif")
 write_stars(jrc_ds, dsn = file)
 
 # remove 0 values for plotting
@@ -93,7 +92,9 @@ write_stars(jrc_ds, dsn = file)
 
 # define own color palette
 pal <- RColorBrewer::brewer.pal(9, "Blues")
-#"#0C2C84", "#41B6C4", "#FFFFCC"
+
+# define own color palette
+pal_jrc <- colorNumeric(palette= c("#FFFFCC", "#41B6C4", "#0C2C84"), domain = c(0,100), na.color = "transparent")
 
 
 map_raster <- leaflet(options = leafletOptions(noWrap = T)) %>%
@@ -103,6 +104,7 @@ map_raster <- leaflet(options = leafletOptions(noWrap = T)) %>%
   #addProviderTiles("OpenStreetMap", group = "OSM") %>% 
   #addProviderTiles(providers$CartoDB.DarkMatter, group = "Dark") %>%
   addProviderTiles(providers$Esri.WorldImagery) %>% 
+  addMiniMap %>% 
   # Add raster images (as overlay groups)
   # addGeoRaster for stars & star_proxy objects
   leafem:::addGeotiff(file = fl, group = "DEM", colorOptions = leafem:::colorOptions( 
@@ -114,9 +116,12 @@ map_raster <- leaflet(options = leafletOptions(noWrap = T)) %>%
   addPolygons(data = landfills, fill = F, weight = 2, color = "black", group = "Landfills") %>%
   addCircleMarkers(data = landfills_sf, color = ~cof(km_cluster_unstand), radius = sqrt(landfills_sf$area_ha)*2, 
                    fillOpacity = 0.5, label = ~name, group = "Risk") %>%
-  addLegend("bottomright", colors= c("red","blue","green"), labels=c("high", "medium", "low"), title="Leakage Risk", group = "Risk") %>%
-  addLegend(pal = pal_dem2, values = values(dem_raster)*100, title = "Slope", group = "DEM") %>%
-  #addLegend(pal = pal, values = values(jrc_raster), title = "Water", group = "Water") %>%
+  addLegend("bottomleft", colors= c("red","blue","green"), labels = c("high", "medium", "low"), 
+            title="Leakage Risk", group = "Risk") %>%
+  addLegend(pal = pal_dem2, values = c(0,80), bins = c(0,80), labFormat = labelFormat(suffix = "°"),
+            title = "Slope", group = "DEM") %>%
+  addLegend(pal = pal_jrc, values = c(0,100), bins = c(0,100), labFormat = labelFormat(suffix = "%"),
+            title = "Water Occurrence", group = "Water") %>%
   # Layers control
   addLayersControl(
     overlayGroups = c("DEM", "Water", "Risk", "Outline", "Landfills"),
@@ -125,49 +130,72 @@ map_raster <- leaflet(options = leafletOptions(noWrap = T)) %>%
 map_raster
 
 #### TODO: raster overlay only works for OSM basemap ?? ####
-#### try addGeoRaster instead of addGeotiff
+#### try addGeoRaster instead of addGeotiff ####
 
   
 
 #### 2. Web App (Leaflet & Shiny) ####
 
-## Define UI of the app
+## Define User Interface of the app
 ui <- fluidPage(
+  
   ## App title
   titlePanel("Plastic Leakage Risk of Landfills in Vietnam"),
   
+  # Sidebar layout with input and output definitions
   sidebarLayout(position = "right",
-    sidebarPanel("sidebar panel for inputs"),
-    mainPanel("main panel for outputs")
-  ),
-  
-  ## add interactive leaflet map
-  leafletOutput("map"),
-  
-  ## add control widget for user to interact with
-  # add map layers as select box
-  selectInput("selectLayer", "Layer", choices = list("Choice 1" = 1, "Choice 2" = 2,
-                                                     "Choice 3" = 3), selected = 1),
-  
-  # add risk clusters as checkbox group
-  checkboxGroupInput("riskCluster",
-                     h3("Checkbox group"), 
-                     choices = list("Choice 1" = 1, 
-                                    "Choice 2" = 2, 
-                                    "Choice 3" = 3),
-                     selected = 1)
+                
+      sidebarPanel(
+        ## add control widgets for user to interact with
+        # First input: Type of data
+        selectInput(inputId = "data_type",
+                    label = "Choose data layer:",
+                    choices = c("","DEM", "Water")),
+        
+        ),
+    mainPanel(
+      ## add interactive leaflet map
+      leafletOutput("map")
+    )
+  )
 )
 
 # Define server logic
 server <- function(input, output, session) {
   
+  ## create static map with leaflet
   output$map <- renderLeaflet({
     map
+  })
+  
+  ## Modify Existing Maps with leafletProxy (dynamic content)
+  # Observer that triggers a map update
+  observeEvent(input$data_type, {
+    if(input$data_type == "DEM")
+    {
+      leafletProxy("map", session) %>%
+        leafem:::addGeotiff(file = fl, group = "DEM", layerId = "layer1",
+                            colorOptions = leafem:::colorOptions(palette = pal_dem, na.color = "transparent")) %>%
+      addLegend(pal = pal_dem2, values = c(0,80), bins = c(0,80), labFormat = labelFormat(suffix = "°"),
+                title = "Slope", group = "DEM", layerId = "layer2")
+    }
+  })
+  observeEvent(input$data_type, {
+    if(input$data_type == "Water")
+    {
+      leafletProxy("map", session) %>%
+        leafem:::addGeotiff(file = file, group = "Water", layerId = "layer1",
+                            colorOptions = leafem:::colorOptions(palette = pal, na.color = "transparent")) %>%
+        addLegend(pal = pal_jrc, values = c(0,100), bins = c(0,100), labFormat = labelFormat(suffix = "%"),
+                  title = "Water Occurrence", group = "Water", layerId = "layer2")
+    }
   })
 }
 
 # Run the app
 shinyApp(ui, server)
+
+#### TODO: select landfill & then plot with weather data changes ####
 
 
 
