@@ -107,6 +107,8 @@ nearest_water <- function(landfills_factors) {
   # polygonize to calculate distance
   water_vector <- rasterToPolygons(water_broad, fun = function(x){x>0}, na.rm = T, dissolve = T)
   
+  #### TODO: use water_broad instead of whole raster data - faster ####
+  
   ## calculate minimum distance to closest water
   # account for no water in buffer
   if(is.null(water_vector)) {

@@ -538,7 +538,7 @@ plot_boxplot(leakage_factors_main[,c(1:6)], by = "km_cluster_unstand")
 plot_boxplot(leakage_factors_main[,c(1:5,7)], by = "km_cluster_stand") # not good results, maxima spread across clusters
 plot_boxplot(leakage_factors_main[,c(1:5,9)], by = "ec_cluster_unstand") # similar to kmeans
 plot_boxplot(leakage_factors_main[,c(1:5,10)], by = "fc_cluster_unstand")
-plot_boxplot(leakage_factors_main[,c(1:5,13)], by = "risk_label")
+plot_boxplot(leakage_factors_main[,c(1:5,14)], by = "risk_label")
 
 plot_scatterplot(split_columns(leakage_factors_main[,c(1:6)])$continuous, by = "km_cluster_unstand")
 plot_scatterplot(split_columns(leakage_factors_main[,c(1:5,9)])$continuous, by = "ec_cluster_unstand")
