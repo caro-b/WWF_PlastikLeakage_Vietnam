@@ -49,6 +49,7 @@ map <- leaflet(landfills_sf) %>%
   #addProviderTiles(providers$CartoDB.DarkMatter) %>% 
   setView(lng = 105.48, lat = 15.54, zoom = 6) %>%
   addMiniMap %>%
+  addPolygons(data = vietnam, fill = F, weight = 2, color = "#FFFFCC", group = "Outline") %>%
   addPolygons(data = landfills, fill = F, weight = 2, color = "black") %>%
   addCircleMarkers(color = ~cof(km_cluster_unstand), radius = sqrt(landfills_sf$area_ha)*2, fillOpacity = 0.5) %>%
   addLegend("bottomleft", colors= c("red","blue","green"), labels=c("high", "medium", "low"), title="Leakage Risk") 
@@ -117,104 +118,18 @@ map_raster <- leaflet(options = leafletOptions(noWrap = T)) %>%
   addPolygons(data = landfills, fill = F, weight = 2, color = "black", group = "Landfills") %>%
   addCircleMarkers(data = landfills_sf, color = ~cof(km_cluster_unstand), radius = sqrt(landfills_sf$area_ha)*2, 
                    fillOpacity = 0.5, label = ~name, group = "Risk") %>%
-  addLegend("bottomleft", colors= c("red","blue","green"), labels = c("high", "medium", "low"), 
-            title="Leakage Risk", group = "Risk") %>%
+  addLegend("bottomleft", colors = c("red","blue","green"), labels = c("high", "medium", "low"), 
+            title ="Leakage Risk", group = "Risk") %>%
   addLegend(pal = pal_dem2, values = c(0,80), bins = c(0,80), labFormat = labelFormat(suffix = "°"),
             title = "Slope", group = "DEM") %>%
   addLegend(pal = pal_jrc, values = c(0,100), bins = c(0,100), labFormat = labelFormat(suffix = "%"),
             title = "Water Occurrence", group = "Water") %>%
   # Layers control
   addLayersControl(
-    overlayGroups = c("DEM", "Water", "Risk", "Outline", "Landfills"),
+    overlayGroups = c("DEM", "Water"),
     options = layersControlOptions(collapsed = F)
   )
 map_raster
-
-  
-
-#### 2. Web App (Leaflet & Shiny) ####
-
-## Define User Interface of the app
-ui <- fluidPage(
-  
-  ## App title
-  titlePanel("Plastic Leakage Risk of Landfills in Vietnam"),
-  
-  # Sidebar layout with input and output definitions
-  sidebarLayout(
-                
-    sidebarPanel(width = 3,
-                 
-      ## add control widgets for user to interact with
-      # First input: Type of data
-    selectInput(inputId = "data_type",
-                label = "Choose data layer:",
-                choices = c("","DEM", "Water")),
-    
-    plotOutput("hist", height = 200),
-        
-    ),
-
-    mainPanel(
-      ## add interactive leaflet map
-      leafletOutput("map", width = "1300px", height = "800px"),
-    )
-  )
-)
-
-# Define server logic
-server <- function(input, output, session) {
-  
-  ## create static map with leaflet
-  output$map <- renderLeaflet({
-    map
-  })
-  
-  output$hist <- renderPlot({
-    hist(landfills_sf$rain)
-  })
-  
-  ## Modify Existing Maps with leafletProxy (dynamic content)
-  # Observer that triggers a map update
-  observeEvent(input$map_marker_click,{
-    ## click returns clickid, long & lat
-    click <- input$map_marker_click
-    # if(is.null(click))
-    #   return()
-    leafletProxy("map", session) %>% 
-      setView(lng = click$lng, lat = click$lat, zoom = 15) #### TODO: zoom according to landfill size ####
-  })
-
-  # add new layer to map if "DEM" selected in dropdown
-  observeEvent(input$data_type, {
-    if(input$data_type == "DEM")
-    {
-      leafletProxy("map", session) %>%
-        leafem:::addGeotiff(file = fl, group = "DEM", layerId = "layer1",
-                            colorOptions = leafem:::colorOptions(palette = pal_dem, na.color = "transparent")) %>%
-      addLegend(pal = pal_dem2, values = c(0,80), bins = c(0,80), labFormat = labelFormat(suffix = "°"),
-                title = "Slope", group = "DEM", layerId = "layer2")
-    }
-  })
-  
-  observeEvent(input$data_type, {
-    if(input$data_type == "Water")
-    {
-      leafletProxy("map", session) %>%
-        leafem:::addGeotiff(file = file, group = "Water", layerId = "layer1",
-                            colorOptions = leafem:::colorOptions(palette = pal, na.color = "transparent")) %>%
-        addLegend(pal = pal_jrc, values = c(0,100), bins = c(0,100), labFormat = labelFormat(suffix = "%"),
-                  title = "Water Occurrence", group = "Water", layerId = "layer2")
-    }
-  })
-}
-
-# Run the app
-shinyApp(ui, server)
-
-#### TODO: not zoom out again when layer added ####
-#### TODO: select landfill & then plot with weather data changes (or: adjust to map frame) ####
-#### TODO: add data explorer with data table ####
 
 
 
@@ -226,11 +141,11 @@ ui_inter <- navbarPage("Superzip", id="nav",
     div(class="outer",
     
       # If not using custom CSS, set height of leafletOutput to a number instead of percent
-      leafletOutput("map", width = "1300px", height = "800px"),
+      leafletOutput("map", width = "1700px", height = "800px"),
       
       absolutePanel(id = "controls", class = "panel panel-default", fixed = T,
         draggable = T, top = 60, left = "auto", right = 20, bottom = "auto",
-        width = 330, height = "auto",
+        width = 350, height = "auto",
         
         h2("Plastic Leakage Risk"),
         
@@ -239,7 +154,9 @@ ui_inter <- navbarPage("Superzip", id="nav",
                     choices = c("","DEM", "Water")
         ),
         
-        plotOutput("hist", height = 200),
+        plotOutput("histRain", height = 200),
+        
+        plotOutput("histWind", height = 200),
     ),
   )
 ),
@@ -260,13 +177,36 @@ server_inter <- function(input, output, session) {
     map
   })
   
-  # create object for clicked polygon
+  # add new layer to map if "DEM" selected in dropdown
+  observeEvent(input$data_type, {
+    if(input$data_type == "DEM")
+    {
+      leafletProxy("map", session) %>%
+        leafem:::addGeotiff(file = fl, group = "DEM", layerId = "layer1",
+                            colorOptions = leafem:::colorOptions(palette = pal_dem, na.color = "transparent")) %>%
+        addLegend(pal = pal_dem2, values = c(0,80), bins = c(0,80), labFormat = labelFormat(suffix = "°"),
+                  title = "Slope", group = "DEM", layerId = "layer2", position = "bottomleft")
+    }
+  })
+  
+  observeEvent(input$data_type, {
+    if(input$data_type == "Water")
+    {
+      leafletProxy("map", session) %>%
+        leafem:::addGeotiff(file = file, group = "Water", layerId = "layer1",
+                            colorOptions = leafem:::colorOptions(palette = pal, na.color = "transparent")) %>%
+        addLegend(pal = pal_jrc, values = c(0,100), bins = c(0,100), labFormat = labelFormat(suffix = "%"),
+                  title = "Water Occurrence", group = "Water", layerId = "layer2", position = "bottomleft")
+    }
+  })
+  
+  # create object for clicked marker (=landfill)
   observeEvent(input$map_marker_click,{
     ## click returns clickid, long & lat
     click <- input$map_marker_click
     # if(is.null(click))
     #   return()
-    leafletProxy("map", session) %>% setView(lng = click$lng, lat = click$lat, zoom = 15)
+    leafletProxy("map", session) %>% setView(lng = click$lng, lat = click$lat, zoom = 16)
   })
   
   # A reactive expression that returns the set of zips that are in map bounds
@@ -282,24 +222,31 @@ server_inter <- function(input, output, session) {
       st_coordinates(landfills_sf)[,1] >= lngRng[1] & st_coordinates(landfills_sf)[,1] <= lngRng[2])
   })
 
-  output$hist <- renderPlot({
+  output$histRain <- renderPlot({
     # If no zipcodes are in view, don't plot
     if (nrow(landfillsInBounds()) == 0)
       return(NULL)
     hist(landfillsInBounds()$rain,
-         main = "Weather Data",
-         xlab = "Rain vs. Wind",
-         xlim = range(landfills_sf$rain),
-         col = '#00DD00',
-         border = 'white')
+       main = "Weather Data",
+       xlab = "Heavy Rain Days",
+       xlim = range(landfills_sf$rain),
+       col = '#00ffff',
+       border = 'white')
   })
   
-  # output$hist <- renderPlot({
-  #     hist(landfills_sf$rain)
-  # })
-  
+  output$histWind <- renderPlot({
+    # If no zipcodes are in view, don't plot
+    if (nrow(landfillsInBounds()) == 0)
+      return(NULL)
+    hist(landfillsInBounds()$windspeed,
+       main = "",
+       xlab = "Heavy Wind Days",
+       xlim = range(landfills_sf$windspeed),
+       col = '#00DD00',
+       border = 'white')
+  })
+
   ## Data Explorer ##
-  
   output$landfills <- DT::renderDataTable({
     df <- landfills_sf
   })
@@ -309,6 +256,8 @@ server_inter <- function(input, output, session) {
 shinyApp(ui_inter, server_inter)
 
 
+
+#### TODO: not zoom out again when layer added ####
 
 #### TODO: publish app on shinyapps.io ####
 # https://shiny.rstudio.com/articles/shinyapps.html#:~:text=Shinyapps.io%20is%20an%20online,focus%20on%20writing%20great%20apps!&text=Use%20the%20tokens%20generated%20by,to%20configure%20your%20rsconnect%20package.
