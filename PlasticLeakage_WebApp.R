@@ -47,10 +47,11 @@ map <- leaflet(landfills_sf) %>%
   #addTiles() %>%  # Add default OpenStreetMap map tiles
   addProviderTiles(providers$Esri.WorldImagery) %>% 
   #addProviderTiles(providers$CartoDB.DarkMatter) %>% 
-  setView(lng = 105.48, lat = 15.54, zoom = 5) %>%
+  setView(lng = 105.48, lat = 15.54, zoom = 6) %>%
   addMiniMap %>%
+  addPolygons(data = landfills, fill = F, weight = 2, color = "black") %>%
   addCircleMarkers(color = ~cof(km_cluster_unstand), radius = sqrt(landfills_sf$area_ha)*2, fillOpacity = 0.5) %>%
-  addLegend("bottomright", colors= c("red","blue","green"), labels=c("high", "medium", "low"), title="Leakage Risk") 
+  addLegend("bottomleft", colors= c("red","blue","green"), labels=c("high", "medium", "low"), title="Leakage Risk") 
 map
 
 
@@ -129,9 +130,6 @@ map_raster <- leaflet(options = leafletOptions(noWrap = T)) %>%
   )
 map_raster
 
-#### TODO: raster overlay only works for OSM basemap ?? ####
-#### try addGeoRaster instead of addGeotiff ####
-
   
 
 #### 2. Web App (Leaflet & Shiny) ####
@@ -143,19 +141,23 @@ ui <- fluidPage(
   titlePanel("Plastic Leakage Risk of Landfills in Vietnam"),
   
   # Sidebar layout with input and output definitions
-  sidebarLayout(position = "right",
+  sidebarLayout(
                 
-      sidebarPanel(
-        ## add control widgets for user to interact with
-        # First input: Type of data
-        selectInput(inputId = "data_type",
-                    label = "Choose data layer:",
-                    choices = c("","DEM", "Water")),
+    sidebarPanel(width = 3,
+                 
+      ## add control widgets for user to interact with
+      # First input: Type of data
+    selectInput(inputId = "data_type",
+                label = "Choose data layer:",
+                choices = c("","DEM", "Water")),
+    
+    plotOutput("hist", height = 200),
         
-        ),
+    ),
+
     mainPanel(
       ## add interactive leaflet map
-      leafletOutput("map")
+      leafletOutput("map", width = "1300px", height = "800px"),
     )
   )
 )
@@ -168,8 +170,22 @@ server <- function(input, output, session) {
     map
   })
   
+  output$hist <- renderPlot({
+    hist(landfills_sf$rain)
+  })
+  
   ## Modify Existing Maps with leafletProxy (dynamic content)
   # Observer that triggers a map update
+  observeEvent(input$map_marker_click,{
+    ## click returns clickid, long & lat
+    click <- input$map_marker_click
+    # if(is.null(click))
+    #   return()
+    leafletProxy("map", session) %>% 
+      setView(lng = click$lng, lat = click$lat, zoom = 15) #### TODO: zoom according to landfill size ####
+  })
+
+  # add new layer to map if "DEM" selected in dropdown
   observeEvent(input$data_type, {
     if(input$data_type == "DEM")
     {
@@ -180,6 +196,7 @@ server <- function(input, output, session) {
                 title = "Slope", group = "DEM", layerId = "layer2")
     }
   })
+  
   observeEvent(input$data_type, {
     if(input$data_type == "Water")
     {
@@ -195,7 +212,103 @@ server <- function(input, output, session) {
 # Run the app
 shinyApp(ui, server)
 
-#### TODO: select landfill & then plot with weather data changes ####
+#### TODO: not zoom out again when layer added ####
+#### TODO: select landfill & then plot with weather data changes (or: adjust to map frame) ####
+#### TODO: add data explorer with data table ####
 
 
 
+#### Interactive Map ####
+
+ui_inter <- navbarPage("Superzip", id="nav",
+           
+  tabPanel("Interactive Map",
+    div(class="outer",
+    
+      # If not using custom CSS, set height of leafletOutput to a number instead of percent
+      leafletOutput("map", width = "1300px", height = "800px"),
+      
+      absolutePanel(id = "controls", class = "panel panel-default", fixed = T,
+        draggable = T, top = 60, left = "auto", right = 20, bottom = "auto",
+        width = 330, height = "auto",
+        
+        h2("Plastic Leakage Risk"),
+        
+        selectInput(inputId = "data_type",
+                    label = "Choose data layer:",
+                    choices = c("","DEM", "Water")
+        ),
+        
+        plotOutput("hist", height = 200),
+    ),
+  )
+),
+
+  tabPanel("Data Explorer",
+    hr(),
+    
+    # display the data in an interactive table
+    DT::dataTableOutput("landfills")
+  )
+)
+
+
+server_inter <- function(input, output, session) {
+  
+  ## create interactive map with leaflet
+  output$map <- renderLeaflet({
+    map
+  })
+  
+  # create object for clicked polygon
+  observeEvent(input$map_marker_click,{
+    ## click returns clickid, long & lat
+    click <- input$map_marker_click
+    # if(is.null(click))
+    #   return()
+    leafletProxy("map", session) %>% setView(lng = click$lng, lat = click$lat, zoom = 15)
+  })
+  
+  # A reactive expression that returns the set of zips that are in map bounds
+  landfillsInBounds <- reactive({
+    if (is.null(input$map_bounds))
+      return(landfills_sf[FALSE,])
+    bounds <- input$map_bounds
+    latRng <- range(bounds$north, bounds$south)
+    lngRng <- range(bounds$east, bounds$west)
+
+    subset(landfills_sf,
+      st_coordinates(landfills_sf)[,2] >= latRng[1] & st_coordinates(landfills_sf)[,2] <= latRng[2] &
+      st_coordinates(landfills_sf)[,1] >= lngRng[1] & st_coordinates(landfills_sf)[,1] <= lngRng[2])
+  })
+
+  output$hist <- renderPlot({
+    # If no zipcodes are in view, don't plot
+    if (nrow(landfillsInBounds()) == 0)
+      return(NULL)
+    hist(landfillsInBounds()$rain,
+         main = "Weather Data",
+         xlab = "Rain vs. Wind",
+         xlim = range(landfills_sf$rain),
+         col = '#00DD00',
+         border = 'white')
+  })
+  
+  # output$hist <- renderPlot({
+  #     hist(landfills_sf$rain)
+  # })
+  
+  ## Data Explorer ##
+  
+  output$landfills <- DT::renderDataTable({
+    df <- landfills_sf
+  })
+}
+
+# Run the app
+shinyApp(ui_inter, server_inter)
+
+
+
+#### TODO: publish app on shinyapps.io ####
+# https://shiny.rstudio.com/articles/shinyapps.html#:~:text=Shinyapps.io%20is%20an%20online,focus%20on%20writing%20great%20apps!&text=Use%20the%20tokens%20generated%20by,to%20configure%20your%20rsconnect%20package.
