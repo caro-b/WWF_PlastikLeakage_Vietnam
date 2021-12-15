@@ -51,7 +51,8 @@ map <- leaflet(landfills_sf) %>%
   addMiniMap %>%
   addPolygons(data = vietnam, fill = F, weight = 2, color = "#FFFFCC", group = "Outline") %>%
   addPolygons(data = landfills, fill = F, weight = 2, color = "black") %>%
-  addCircleMarkers(color = ~cof(km_cluster_unstand), radius = sqrt(landfills_sf$area_ha)*2, fillOpacity = 0.5) %>%
+  addCircleMarkers(data = landfills_sf, color = ~cof(km_cluster_unstand), radius = sqrt(landfills_sf$area_ha)*2, 
+                   fillOpacity = 0.5, label = ~name, group = "Risk") %>%
   addLegend("bottomleft", colors= c("red","blue","green"), labels=c("high", "medium", "low"), title="Leakage Risk") 
 map
 
