@@ -10,7 +10,7 @@
 #### I. SETUP ####
 
 # install required packages (if not installed yet)
-packagelist <- c("cartography","dplyr","gdalUtils","raster","reproducible","rgeos","rgdal","rnaturalearth","sf","sp","SpaDES","tidyverse")
+packagelist <- c("cartography","dplyr","gdalUtils","ggplot2","raster","reproducible","rgeos","rgdal","rnaturalearth","sf","sp","SpaDES","tidyverse")
 new.packages <- packagelist[!(packagelist %in% installed.packages()[,"Package"])]
 if(length(new.packages)) install.packages(new.packages)
 
@@ -32,34 +32,71 @@ vietnam <- readOGR(paste(dir, "/vietnam/vietnam.shp", sep = ""))
 
 #### Plastic Leakage Factors
 
-## data downloaded for time period: 01.10.2016-01.10.2021
-
-#### 1. Precipitation (daily)(mm)
-
-## a) NOAA GHCN (daily)
-# downloaded from: https://www.ncdc.noaa.gov/cdo-web/datasets/GHCND/locations/FIPS:VM/detail
-# downloaded as CSV
-prcp_noaa <- read_csv(paste(dir, "/2814077.csv", sep = ""))
-
-
-## b) Meteostat
+#### 1. Weather Data (Meteostat)
 ## downloaded via python API
+
+## data downloaded for time period: 01.01.2016-31.12.2020
+
+## b) Preciptation (mm)
 prcp_meteostat <- read_csv(paste(dir, "/Meteostat_PrecipitationDaily.csv", sep = ""))
 
 
-
-#### 2. Wind Speed (hourly)
-## downloaded via python API
+#### 2. Wind Speed (hourly) / Peak Wind Gust
 wind_meteostat <- read_csv(paste(dir, "/Meteostat_WindHourly.csv", sep = ""))
+
+meteostat <- read_csv(paste(dir, "/Meteostat_Daily.csv", sep = ""))
+
+meteostat_daily <- meteostat %>% 
+                    group_by(station, time) %>% 
+                     dplyr::summarise(prcp_mean = mean(prcp, na.rm = T), wspd_mean = mean(wspd, na.rm = T))
+
+meteostat_daily$year <- strftime(meteostat_daily$time, "%Y")
+meteostat_daily$month <- strftime(meteostat_daily$time, "%m")
+meteostat_daily$day <- strftime(meteostat_daily$time, "%d")
+
+
+## divide data into years
+meteostat_daily_16 <- meteostat_daily[meteostat_daily$year == 2016,]
+meteostat_daily_17 <- meteostat_daily[meteostat_daily$year == 2017,]
+meteostat_daily_18 <- meteostat_daily[meteostat_daily$year == 2018,]
+meteostat_daily_19 <- meteostat_daily[meteostat_daily$year == 2019,]
+meteostat_daily_20 <- meteostat_daily[meteostat_daily$year == 2020,]
+
+# check data availability per year
+sum(is.na(meteostat_daily_16))
+sum(is.na(meteostat_daily_17))
+sum(is.na(meteostat_daily_18))
+sum(is.na(meteostat_daily_19)) # least NAs - take 2019 as reference year
+sum(is.na(meteostat_daily_20))
+
+
+## plot time series one year to check precipitation distribution
+qplot(x=time, y=prcp_mean,
+      data=meteostat_daily_19, na.rm=T)
+
+## aggregate over years to reduce NAs
+meteostat_yearly_mean <- meteostat_daily %>%
+                          group_by(station, month, day) %>% 
+                          dplyr::summarise(prcp_yearly_mean = mean(prcp_mean, na.rm = T), 
+                                           wspd_yearly_mean = mean(wspd_mean, na.rm = T)) 
+
+sum(is.na(meteostat_yearly_mean))
+
+
+
+
+# ## take average of one year (from 5 years)
+# # aggregate per year
+# meteostat_yearly <- meteostat_daily %>% 
+#   group_by(station, time) %>% 
+#   dplyr::summarise(prcp_mean = mean(prcp, na.rm = T), wspd_mean = mean(wspd, na.rm = T))
+
 
 
 
 #### 3. Water Areas (JRC Global Surface Water)
 ## downloaded via Google Earth Engine & processed in QGIS (faster & less memory)
 jrc_water <- raster(paste(dir, "/JRC_GlobalSurfaceWater_Vietnam_30.tif", sep = ""))
-#jrc_water_perm <- raster(paste(dir, "/JRC_GlobalSurfaceWater_Vietnam_perm.tif", sep = ""))
-# reads proxy as actual raster to big
-#jrc_water_perm <- read_stars(paste(dir, "/JRC_GlobalSurfaceWater_Vietnam_perm.tif", sep = ""), NA_value = 0)
 
 
 
@@ -112,32 +149,12 @@ writeRaster(slope, paste(dir, "/dem/dem_slope.tif", sep = ""), overwrite = T)
 
 #### 1. Precipitation (daily)
 
-## a) NOAA GHCND
-## remove not needed column
-prcp_noaa$PRCP_ATTRIBUTES <- NULL
-prcp_noaa$ELEVATION <- NULL
-
-## rename columns to fit Meteostat data
-names(prcp_noaa) <- tolower(names(prcp_noaa))
-
-## remove NA values (where no precipitation value recorded)
-prcp_noaa <- prcp_noaa[!is.na(prcp_noaa$prcp),]
-
-## check length of station names
-unique(prcp_noaa$station) # 5 digits
-
-## extract station name
-prcp_noaa$station <- substr(prcp_noaa$station, nchar(prcp_noaa$station)-4, nchar(prcp_noaa$station))
-
-
-## b) Meteostat
 ## rename columns
 prcp_meteostat <- dplyr::rename(prcp_meteostat, date = time)
 
 
 #### 2. Wind (hourly)
 
-## a) Meteostat
 ## rename columns
 wind_meteostat <- dplyr::rename(wind_meteostat, datetime = time)
 
@@ -187,56 +204,28 @@ sum(duplicated(wind_meteostat[,1:3])) #0
 
 
 
-#### IV. DATA MERGING ####
-
-#### Precipitation (daily)
-
-# first convert to same data type
-typeof(prcp_noaa$station) # character
-typeof(prcp_meteostat$station) # double
-prcp_meteostat$station <- as.character(prcp_meteostat$station)
-
-## merge data by station id
-prcp_merge <- rbind(prcp_noaa[,c("station", "date", "prcp")], prcp_meteostat[,c("station", "date", "prcp")])
-
-## remove exact duplicates
-prcp_merge <- distinct(prcp_merge)
-
-## number of duplicates in station & date
-sum(duplicated(prcp_merge[,1:2])) #4443
-
-## for multiple prcp values at same station & date - take average
-prcp_merge <- prcp_merge %>% group_by(station, date) %>% dplyr::summarise(prcp_mean=mean(prcp))
-
-
-
 #### IV. DATA ANALYSIS ####
 
-#### Heavy Rain days per station (>=100 mm rain per day)
-heavyrain_stations <- prcp_merge %>% group_by(station) %>% dplyr::summarise(heavyraindays = sum(prcp_mean >= 100))
+## Heavy Rain days per station (>=100 mm rain per day)
+heavyrain_stations <- meteostat_daily %>% group_by(station) %>% dplyr::summarise(heavyraindays = sum(prcp_mean >= 100, na.rm = T))
 
-#### Heavy Wind days per station (>39km/h)
-heavywind_stations <- wind_meteostat %>% group_by(station) %>% dplyr::summarise(heavywindhours = sum(wspd >= 39))
+## Heavy Wind days per station (>39km/h)
+heavywind_stations <- meteostat_daily %>% group_by(station) %>% dplyr::summarise(heavywindhours = sum(wspd_mean >= 39, na.rm = T))
 
 
 ## add coordinates to stations
-# station location data - from meteostat data (as noaa is only one of its sources)
-station_data <- unique(prcp_meteostat[,c(1,4:6)])
-## add noaa stations
-station_data <- rbind(station_data, unique(prcp_noaa[,c(1:4)])[!unique(prcp_noaa$station) %in% station_data$station,])
-
-# first convert to same data type
-typeof(heavywind_stations$station) # double
-typeof(station_data$station) # character
-
-# change to character data type
-heavywind_stations$station <- as.character(heavywind_stations$station)
+station_data <- unique(meteostat[,c(1,5:7)])
 
 ## merge prcp & wspd data
 climate_data <- full_join(heavyrain_stations, heavywind_stations, by ="station") 
 
 ## join extra station information to climate data
 climate_data <- left_join(climate_data, station_data, by ="station")
+
+
+## join extra station information to daily weather data
+weather_daily <- left_join(meteostat_daily, station_data, by ="station")
+
 
 
 
