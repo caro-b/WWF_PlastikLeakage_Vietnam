@@ -46,7 +46,6 @@ plot(landfills_sf_centroids$geometry, add = T)
 
 #### 1. Climatic conditions (Precipitation (daily) & Wind Speed (hourly))
 ## point data --> find nearest station
-climate_stations_sf <- st_as_sf(climate_stations)
 
 ## save results in spatialdataframe
 landfills_factors <- landfills_sf_centroids
@@ -56,7 +55,9 @@ landfills_factors$rain <- -1
 landfills_factors$windspeed <- -1
 
 ## function to find nearest climate station & save corresponding data
-nearest_climate_station <- function(landfills_factors) {
+nearest_climate_station <- function(landfills_factors, climate, x) {
+  
+  climate_stations_sf <- st_as_sf(climate)
   
   ## calculate the distance matrix in meters using Great Circle distance (for lat/long data) from one landfill to all climate stations
   dist_climate <- st_distance(landfills_factors[i,]$geometry, climate_stations_sf$geometry)
@@ -68,9 +69,12 @@ nearest_climate_station <- function(landfills_factors) {
   dist_min_climate <- (which(dist_climate == min(dist_climate), arr.ind=TRUE))[[1,2]]
   
   ## find associated climate station & save climate values to sf object
-  landfills_factors[i,]$rain <- climate_stations_sf[dist_min_climate,]$heavyraindays
-  landfills_factors[i,]$windspeed <- climate_stations_sf[dist_min_climate,]$heavywindhours
-  
+  if(x == 1) {
+    landfills_factors[i,]$rain <- climate_stations_sf[dist_min_climate,][[2]]
+  } else {
+    landfills_factors[i,]$windspeed <- climate_stations_sf[dist_min_climate,][[2]]
+  }
+ 
   return(landfills_factors)
 }
 
@@ -106,9 +110,7 @@ nearest_water <- function(landfills_factors) {
   water_broad <- intersect(jrc_water, buffer_broad)
   # polygonize to calculate distance
   water_vector <- rasterToPolygons(water_broad, fun = function(x){x>0}, na.rm = T, dissolve = T)
-  
-  #### TODO: use water_broad instead of whole raster data - faster ####
-  
+
   ## calculate minimum distance to closest water
   # account for no water in buffer
   if(is.null(water_vector)) {
@@ -155,32 +157,6 @@ distance_ocean <- function(landfills_factors) {
 
 
 
-#### 4. Natural Hazards (Flooding & Storm)
-#### (a) Flood Proneness)
-
-
-#### b) Storm Tracks
-
-# # initiate columns with dummy variable
-# landfills_factors$no_storms <- -1
-# 
-# ## function to find nearest water & save corresponding data
-# find_storms <- function(landfills_factors) {
-#   
-#   # get water in 1km buffer around landfill - then high risk
-#   buffer <- st_buffer(landfills_sf_centroids[i,], dist = 1000) # 10km
-#   
-#   # intersect to get storm tracks in buffer
-#   storm <- st_intersection(storm_vnm, st_as_sf(buffer))
-#   
-#   # count number of storm tracks in buffer - higher risk
-#   landfills_factors[i,]$no_storms <- nrow(storm)
-#   
-#   return(landfills_factors)
-# }
-
-
-
 #### 5. Topography - DEM (Digital Elevation Model)
 
 landfills_factors$slope <- -1
@@ -196,43 +172,13 @@ mean_slope <- function(landfills_factors) {
 
 
 
-#### 6. Waste Generation & Leakage
-## polygon per province --> in which polygon landfill lies in
-#waste_sf <- st_as_sf(waste)
-
-# convert CRS to get matching CRS
-#landfills_sf_utm48 <- st_transform(landfills_sf, crs(waste_sf))
-
-# landfills_factors$waste <- -1
-# landfills_factors$leakage <- -1
-
-## function that finds province in which landfill lies & saves corresponding waste data
-# waste_province <- function(landfills_factors) {
-#   waste <- st_intersection(waste_sf, landfills_sf_utm48[i,], sparse=T)
-#   if (nrow(waste) != 0) {
-#     landfills_factors[i,]$waste <- waste$waste_t_y
-#     landfills_factors[i,]$leakage <- waste$leakage_perc
-#   } else {
-#     landfills_factors[i,]$waste <- NA
-#     landfills_factors[i,]$leakage <- NA
-#   }
-#   return(landfills_factors)
-# }
-# 
-# ## account for NA values
-# landfills_factors[is.na(landfills_factors$waste),]
-# 
-# ## Con Do belongs to Bà Rịa–Vũng Tàu province (=70-200.000 waste)
-# landfills_factors$waste[is.na(landfills_factors$waste)] <- "70-200.000"
-
-
-
 ## loop over landfills - take one landfill at once & calculate variable values
 # index for loop
 i <- 1
 while (i <= length(landfills_factors$geometry)) {
   #function to find nearest station & save climate attributes into sf object
-  landfills_factors <- nearest_climate_station(landfills_factors)
+  landfills_factors <- nearest_climate_station(landfills_factors, climate_stations_rain, 1)
+  landfills_factors <- nearest_climate_station(landfills_factors, climate_stations_wind, 2)
   # function to find nearest water body
   landfills_factors <- nearest_water(landfills_factors)
   # function to count storms near landfill
