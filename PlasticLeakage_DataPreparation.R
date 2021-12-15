@@ -53,6 +53,7 @@ meteostat_daily <- meteostat %>%
 meteostat_daily$year <- strftime(meteostat_daily$time, "%Y")
 meteostat_daily$month <- strftime(meteostat_daily$time, "%m")
 meteostat_daily$day <- strftime(meteostat_daily$time, "%d")
+meteostat_daily$monthday <- format(meteostat_daily$time,"%m-%d")
 
 
 ## divide data into years
@@ -71,31 +72,35 @@ sum(is.na(meteostat_daily_20))
 
 
 ## plot time series one year to check precipitation distribution
-qplot(x=time, y=prcp_mean,
-      data=meteostat_daily_19, na.rm=T)
+qplot(x = time, y = prcp_mean,
+      data = meteostat_daily_19, na.rm = T)
+
 
 ## aggregate over years to reduce NAs
-meteostat_yearly_mean <- meteostat_daily %>%
-                          group_by(station, month, day) %>% 
+meteostat_daily_mean <- meteostat_daily %>%
+                          group_by(station, monthday) %>% 
                           dplyr::summarise(prcp_yearly_mean = mean(prcp_mean, na.rm = T), 
-                                           wspd_yearly_mean = mean(wspd_mean, na.rm = T)) 
+                                           wspd_yearly_max = max(wspd_mean, na.rm = T)) 
 
-sum(is.na(meteostat_yearly_mean))
+meteostat_daily_mean$wspd_yearly_max[meteostat_daily_mean$wspd_yearly_max == -Inf] <- NA
+
+sum(is.na(meteostat_daily_mean))
+
+qplot(x = monthday, y = prcp_yearly_mean, data = meteostat_daily_mean, na.rm = T)
 
 
+## aggregate to yearly average
+meteostat_yearly_mean <- meteostat_daily_mean %>%
+  group_by(station) %>% 
+  dplyr::summarise(prcp_sum = sum(prcp_yearly_mean, na.rm = T), 
+                   wspd_max = max(wspd_yearly_max, na.rm = T)) 
 
-
-# ## take average of one year (from 5 years)
-# # aggregate per year
-# meteostat_yearly <- meteostat_daily %>% 
-#   group_by(station, time) %>% 
-#   dplyr::summarise(prcp_mean = mean(prcp, na.rm = T), wspd_mean = mean(wspd, na.rm = T))
-
+meteostat_yearly_mean$wspd_max[meteostat_yearly_mean$wspd_max == -Inf] <- NA
 
 
 
 #### 3. Water Areas (JRC Global Surface Water)
-## downloaded via Google Earth Engine & processed in QGIS (faster & less memory)
+## downloaded via Google Earth Engine & pre-processed in QGIS (faster & less memory)
 jrc_water <- raster(paste(dir, "/JRC_GlobalSurfaceWater_Vietnam_30.tif", sep = ""))
 
 
@@ -217,15 +222,21 @@ heavywind_stations <- meteostat_daily %>% group_by(station) %>% dplyr::summarise
 station_data <- unique(meteostat[,c(1,5:7)])
 
 ## merge prcp & wspd data
-climate_data <- full_join(heavyrain_stations, heavywind_stations, by ="station") 
+#climate_data <- full_join(heavyrain_stations, heavywind_stations, by ="station") 
 
 ## join extra station information to climate data
-climate_data <- left_join(climate_data, station_data, by ="station")
+#climate_data <- left_join(climate_data, station_data, by ="station")
 
 
 ## join extra station information to daily weather data
-weather_daily <- left_join(meteostat_daily, station_data, by ="station")
+climate_data <- left_join(meteostat_yearly_mean, station_data, by ="station")
 
+# convert 0 values to NA (as 0 precipitation very likely wrong data)
+climate_data$prcp_sum[climate_data$prcp_sum == 0] <- NA
+
+## split data into rain & wind data frame to account for na values
+climate_data_rain <- climate_data[!is.na(climate_data$prcp_sum),][-3]
+climate_data_wind <- climate_data[!is.na(climate_data$wspd_max),][-2]
 
 
 
@@ -234,11 +245,14 @@ weather_daily <- left_join(meteostat_daily, station_data, by ="station")
 #### 1. Climate Data
 
 ## create spatialpoints from lat, long coordinates
-climate_stations <- SpatialPointsDataFrame(coords = c(climate_data[,c("longitude","latitude")]),
+climate_stations_rain <- SpatialPointsDataFrame(coords = c(climate_data_rain[,c("longitude","latitude")]),
                                            proj4string = CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"),
-                                           data = climate_data)
-plot(climate_stations)
+                                           data = climate_data_rain)
+climate_stations_wind <- SpatialPointsDataFrame(coords = c(climate_data_wind[,c("longitude","latitude")]),
+                                                proj4string = CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"),
+                                                data = climate_data_wind)
 
 ## export as shapefile
-shapefile(x = climate_stations, filename = paste(dir, "/climate_stations_VN.shp", sep = ""), overwrite=T)
+shapefile(x = climate_stations_rain, filename = paste(dir, "/climate_stations_rain.shp", sep = ""), overwrite=T)
+shapefile(x = climate_stations_wind, filename = paste(dir, "/climate_stations_wind.shp", sep = ""), overwrite=T)
 
