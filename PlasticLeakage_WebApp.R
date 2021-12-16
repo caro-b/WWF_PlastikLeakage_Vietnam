@@ -249,7 +249,9 @@ server_inter <- function(input, output, session) {
 
   ## Data Explorer ##
   output$landfills <- DT::renderDataTable({
-    df <- landfills_sf
+    df <- landfills_sf %>% 
+      # select relevant columns #### TODO ####
+      select()
   })
 }
 

@@ -23,10 +23,6 @@ dir <- 'C:/Users/carob/Documents/WWF_PlastikLeakage_Vietnam/data'
 ## import shapefile of vietnam
 vietnam <- readOGR(paste(dir, "/vietnam/vietnam.shp", sep = ""))
 
-## import dataframe as CSV
-# filename <- paste(dir,"/landfill_variables.csv", sep= "")
-# landfills_factors <- read.csv(filename, sep= ";")
-
 ## import landfill polygons
 landfills <- readOGR(paste(dir, "/landfill_variables.gpkg", sep = ""))
 
@@ -67,14 +63,11 @@ leakage_factors %>% plot_histogram()
 ## Boxplots
 boxplot(leakage_factors)
 
-par(mfrow=c(2,6))
-boxplot(leakage_factors$area_ha)
+par(mfrow=c(1,5))
+#boxplot(leakage_factors$area_ha)
 boxplot(leakage_factors$rain)
 boxplot(leakage_factors$windspeed)
-boxplot(leakage_factors$dist_water)
-boxplot(leakage_factors$dist_permwater)
 boxplot(leakage_factors$flood_risk)
-boxplot(leakage_factors$dist_ocean)
 boxplot(leakage_factors$slope)
 boxplot(leakage_factors$watermin)
 
@@ -98,7 +91,6 @@ pairs.panels(leakage_factors[-1],
 
 
 #### Correlation Matrix
-
 leakage_factors %>% plot_correlation() 
 ## positive correlation: high correlation between watermin & dist_water, waste & area
 ## negative correlation: rel. high between waste & rain, waste & distance water
@@ -107,12 +99,10 @@ leakage_factors %>% plot_correlation()
 ## drop single water distances
 leakage_factors %>% plot_correlation() 
 
-## drop waste
-leakage_factors[-c(4,5,7,10)] %>% plot_correlation() 
-
 ## main variables
 # drop single water distances
 leakage_factors_main <- leakage_factors[-c(1,4,5,7)]
+leakage_factors_main %>% plot_correlation() 
 
 
 
@@ -131,6 +121,7 @@ KMO(r=cor(X4)) # 0.54
 
 cortest.bartlett(X3) # significance level < 0.05 indicates factor analysis might be useful
 cortest.bartlett(X4) # doesn't make sense to do factor analysis
+
 
 #### Principal Component Analysis
 
@@ -200,54 +191,36 @@ fviz_dist(distance, gradient = list(low = "#00AFBB", mid = "white", high = "#FC4
 ## 1. Elbow method
 
 # minimize total intra-cluster variation
-fviz_nbclust(leakage_factors_km, kmeans, method = "wss") # 7 clusters, unstandardized: 3
+fviz_nbclust(leakage_factors_km, kmeans, method = "wss") # unstandardized: 3 clusters, standardized: 4 clusters
 
 
 ## 2. Silhouette Method
 # how well each object lies within its cluster
-fviz_nbclust(leakage_factors_km, kmeans, method = "silhouette") # 9 clusters, unstandardized: 3
+fviz_nbclust(leakage_factors_norm, kmeans, method = "silhouette") # unstandardized: 8 clusters, standardized: 6 clusters
 
 
 ## 3. Gap statistic
 gap_stat <- clusGap(leakage_factors_km,
                     FUN = kmeans,
-                    K.max = ncol(leakage_factors_norm),
+                    K.max = ncol(leakage_factors_km),
                     nstart = 25,
                     B = 50)
 
 # Plotten der Anzahl der Cluster vs. Lückenstatistik
-fviz_gap_stat(gap_stat) # 1 cluster, unstandardized: 3
+fviz_gap_stat(gap_stat) # 1 cluster, unstandardized: 2 clusters
 
 
 ## 4. Consensus-based
-n_clusters(leakage_factors_km, package = "all", standardize = T) # 6 clusters, unstandardized: 3
+n_clusters(leakage_factors_km, package = "all", standardize = F) # standardized: 4 clusters, unstandardized: 3 clusters
 
 
 
 #### K-means Clustering
 
-# set seed to make clustering reproducible
-set.seed(123)
+## clustering using standardized (normalized) data
+set.seed(123) # set seed to make clustering reproducible
 km <- kmeans(leakage_factors_norm, centers = 3, nstart = 25) # 3 clusters (low, medium & high risk), random starting condition
 km 
-
-set.seed(111)
-km2 <- kmeans(leakage_factors_norm, centers = 4, nstart = 25) 
-km2
-
-set.seed(155)
-km3 <- kmeans(leakage_factors_norm, centers = 5, nstart = 25) 
-km3
-
-## storms dropped (as rel. high collinearity)
-set.seed(133)
-km4 <- kmeans(leakage_factors_norm2, centers = 3, nstart = 25)
-km4
-
-## storms & area dropped
-set.seed(177)
-km5 <- kmeans(leakage_factors_norm3, centers = 3, nstart = 25)
-km5
 
 ## un-standardized data
 set.seed(99)
@@ -255,18 +228,11 @@ km6 <- kmeans(leakage_factors_km, centers = 3, nstart = 25) # 3 clusters (low, m
 km6
 
 
-
 ## Quality of k-means clustering
 # Between Sum of Squares divided by Total Sum of Squares
 ## 3 cluster
-km$betweenss / km$totss * 100 # 37,3%
-km4$betweenss / km4$totss * 100 # 42,1% 
-km5$betweenss / km5$totss * 100 # 44,5% 
-km6$betweenss / km6$totss * 100 # 93,4% 
-
-km2$betweenss / km2$totss * 100 # 51,12%
-km3$betweenss / km3$totss * 100 # 63,24% 
-
+km$betweenss / km$totss * 100 # 44,76%
+km6$betweenss / km6$totss * 100 # 70,35% 
 
 # plot clustering results
 fviz_cluster(km6, data = leakage_factors_km, stand = F)
