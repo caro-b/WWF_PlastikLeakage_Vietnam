@@ -339,11 +339,16 @@ while (i <= length(landfills_factors$geometry)) {
 }
 
 
+## take smallest water distance
+landfills_factors$watermin <- with(landfills_factors, 
+                           pmin(landfills_factors$dist_water, landfills_factors$dist_permwater, landfills_factors$dist_ocean, na.rm=T))
+
+
 ## save dataframe as CSV
 filename <- paste(dir,"/landfill_variables.csv", sep= "")
 write.table(landfills_factors, file = filename, row.names = F, fileEncoding = "UTF-8", sep = ";")
 
-## save as shapefile
+## save as geopackage
 st_write(landfills_factors, paste(dir,"/landfill_variables.gpkg", sep= ""), overwrite=T, append=F)
 
 

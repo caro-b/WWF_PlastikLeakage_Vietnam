@@ -31,19 +31,7 @@ landfills_factors <- landfills@data
 
 #### I. Data Preparation
 
-## take smallest water distance
-landfills$watermin <- with(landfills_factors, 
-                                   pmin(landfills_factors$dist_water, landfills_factors$dist_permwater, landfills_factors$dist_ocean, na.rm=T))
-
 str(landfills)
-
-# # change character to integer values
-# from <- c("10-30.000","30-50.000","50-70.000","70-200.000","200-300.000","300-2.500.000")
-# to <- c(10000,30000,50000,70000,200000,300000)
-# landfills$waste <- plyr::mapvalues(landfills$waste, from, to)
-# landfills$waste <- as.integer(landfills$waste)
-
-#str(landfills)
 
 # only keep plastic leakage factors
 leakage_factors <- landfills@data[,c(5,7:14)]
@@ -520,5 +508,5 @@ table(leakage_factors_main$km_cluster_unstand)
 landfills_sf <- st_as_sf(landfills)
 
 ## save results as shapefile
-st_write(landfills_sf, paste(dir,"/landfill_clusters.gpkg", sep= ""), overwrite=T, append=F)
+st_write(landfills_sf[,-c(16:17)], paste(dir,"/landfill_clusters.gpkg", sep= ""), overwrite=T, append=F)
 
