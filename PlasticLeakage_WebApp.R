@@ -41,7 +41,7 @@ vietnam <- readOGR(paste(dir, "/vietnam/vietnam.shp", sep = ""))
 # e.g. plot water distance < 500m in red
 
 # create color palette
-cof <- colorFactor(c("red","green","blue"), domain=c("1","2","3"))
+cof <- colorFactor(c("green","blue","red"), domain=c("1","2","3"))
 
 map <- leaflet(landfills_sf) %>%
   #addTiles() %>%  # Add default OpenStreetMap map tiles
@@ -260,7 +260,49 @@ shinyApp(ui_inter, server_inter)
 
 
 
-#### TODO: not zoom out again when layer added ####
+#### TODO: user can input new landfill to data table ####
+# new_landfill <- 
+
+## create spatialpointsdataframe from lat, long coordinates of user input
+new_landfill_spatial <- SpatialPointsDataFrame(coords = c(new_landfill[,c("longitude","latitude")]),
+                                                proj4string = CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"),
+                                                data = landfills_sf[0,1:4])
+
+## import current landfill spatial polygons
+landfills <- readOGR(paste(dir, "/landfills/OpenLandfills_Vietnam.shp", sep = ""), use_iconv = T, encoding = "UTF-8")
+
+## add landfill to landfill spatial polygons
+landfills_new <- rbind(landfills, new_landfill_spatial)
+
+## export new landfills to shapefile
+writeOGR(landfills_new, paste(dir, "/landfills/OpenLandfills_Vietnam.shp", sep = ""), driver = "ESRI Shapefile", overwrite = T)
+
+
+
+#### TODO: run DataPreparation script to calculate data of new landfill ####
+source("C:/Users/carob/Documents/WWF_PlastikLeakage_Vietnam/PlasticLeakage_DataPreparation.R")
+
+## import landfill data output of script
+landfill_variables <- readOGR(paste(dir, "/landfill_variables.gpkg", sep = ""))
+landfill_variables_sf <- st_as_sf(landfill_variables)
+
+## only run script for new landfill (faster)
+
+
+## predict risk class/cluster of new landfill (without re-running clustering algorithm) ####
+library(class)
+train <- as.data.frame(landfills_sf[,c(7:8,11:15)][1:20,])
+test <- as.data.frame(landfills_sf[,c(7:8,11:15)][21:31,])
+knnClust <- knn(train = train[,-c(7:8)], test = test[,-c(7:8)], k = 1, cl = train$km_cluster_unstand)
+knnClust
+
+landfill_variables_sf$km_cluster_unstand <- knnClust
+
+## add risk cluster to existing landfill dataframe
+landfills_sf_new <- rbind(landfills_sf, landfill_variables_sf)
+
+## re-run script?
+
 
 #### TODO: publish app on shinyapps.io ####
 # https://shiny.rstudio.com/articles/shinyapps.html#:~:text=Shinyapps.io%20is%20an%20online,focus%20on%20writing%20great%20apps!&text=Use%20the%20tokens%20generated%20by,to%20configure%20your%20rsconnect%20package.
