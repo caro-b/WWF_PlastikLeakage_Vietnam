@@ -34,7 +34,6 @@ vietnam <- readOGR(paste(dir, "/vietnam/vietnam.shp", sep = ""))
 #### 1. Weather Data (Meteostat) - Precipitation (mm) & Windspeed (km/h)
 ## downloaded via Python API
 ## data downloaded for time period: 01.01.2016-31.12.2020
-
 meteostat <- read_csv(paste(dir, "/Meteostat_Daily.csv", sep = ""))
 
 ## aggregate data over station & day
@@ -168,8 +167,12 @@ shapefile(x = climate_stations_wind, filename = paste(dir, "/climate_stations_wi
 #################### Variable Preparation ####################
 
 #### I. Import landfill Locations ####
+
 ## import landfill polygons
-landfills <- readOGR(paste(dir, "/landfills/OpenLandfills_Vietnam.shp", sep = ""), use_iconv = T, encoding = "UTF-8")
+#landfills <- readOGR(paste(dir, "/landfills/OpenLandfills_Vietnam.shp", sep = ""), use_iconv = T, encoding = "UTF-8")
+## import newly created landfill polygons (from webapp)
+landfills <- readOGR(paste(dir, "/landfills/OpenLandfills_Vietnam_new.shp", sep = ""), use_iconv = T, encoding = "UTF-8")
+
 
 ## access & plot first landfill
 plot(landfills[1,])
